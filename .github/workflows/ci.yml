@@ -175,6 +175,10 @@ jobs:
         with:
           ref: ${{ inputs.ref || github.ref }}
 
+      # Registers a current QEMU for the arm64 build. Without it BuildKit falls
+      # back to its own bundled emulator, which dies with SIGILL (exit 132)
+      # running Node 22 under arm64 as soon as `npm ci` misses the cache.
+      - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
 
       # Builds the release image for both target platforms without pushing, so
