@@ -65,7 +65,7 @@ The server lives for the whole session, so the active connection is just state i
 
 ## Supported tags
 
-`0.1.0`, `0.1`, `0`, `latest`, built for `linux/amd64` and `linux/arm64`.
+`0.2.0`, `0.2`, `0`, `latest`, built for `linux/amd64` and `linux/arm64`.
 
 ---
 

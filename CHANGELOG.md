@@ -6,9 +6,21 @@ Each release is published to npm and Docker Hub from the same tag. Where a versi
 
 ## [Unreleased]
 
+## [0.2.0]
+
+Not yet published to npm, Docker Hub or the MCP Registry.
+
+### Added
+
+- Optional call logging (`DB_LOG`, `DB_LOG_FILE`, `DB_LOG_FORMAT`): every tool call with its input, each statement sent to the database, and the full output, in a readable boxed format or as JSON lines. Credentials are always redacted, and a logging failure never fails a call.
+- A permanent log folder (`DB_LOG_DIR`): every entry saved as its own pretty JSON file, in a folder per day, never deleted, shared safely by every copy of the server.
+- A live log viewer in the browser (`DB_LOG_PORT`, `DB_LOG_HISTORY`): paginated, 20 per page by default with 10, 20, 30 or 50 to choose from; filters across everything logged; a copy icon on every block; and live updates as each call finishes. With a log folder it shows every copy's calls, across restarts. Off unless a port is set; it has no access control and listens on all interfaces.
+- The viewer binds its port on the first tool call, so the copy of the server actually in use gets it. A busy port is explained once in the chat, naming the process holding it, and retried on every call.
+- `current_connection` reports the viewer's state.
+
 ## [0.1.0]
 
-First release. Not yet published to npm, Docker Hub or the MCP Registry.
+First version. Never published to npm, Docker Hub or the MCP Registry.
 
 ### Added
 
@@ -20,6 +32,3 @@ First release. Not yet published to npm, Docker Hub or the MCP Registry.
 - Two independent read-only layers on every engine, each proved by integration tests that send writes straight to the driver.
 - A dialect-aware SQL validator that lexes PostgreSQL dollar quotes and `E''` strings, SQL Server brackets and ClickHouse heredocs, scans every T-SQL statement for writes, and refuses constructs it cannot read with certainty, such as nested comments and MySQL executable comments.
 - SQLite runs in a separate process, so a query past the timeout is killed rather than freezing the server.
-- Optional call logging (`DB_LOG`, `DB_LOG_FILE`, `DB_LOG_FORMAT`): every tool call with its input, each statement sent to the database, and the full output, in a readable boxed format or as JSON lines. Credentials are always redacted, and a logging failure never fails a call.
-- A permanent log folder (`DB_LOG_DIR`): every entry saved as its own pretty JSON file, in a folder per day, never deleted, shared safely by every copy of the server.
-- A live log viewer in the browser (`DB_LOG_PORT`, `DB_LOG_HISTORY`), paginated at 20 per page by default with 10, 20, 30 or 50 to choose from, filtering across everything logged, and showing every copy's calls when the folder is shared: each call appears the moment it finishes, with filtering, pause and copy. Off unless a port is set; it has no access control and listens on all interfaces. It binds on the first tool call, so the copy of the server actually in use gets the port, and a busy port is explained once in the chat and retried on every call.
