@@ -265,8 +265,24 @@ describe("the page script", () => {
   test("loads nothing from outside the server", () => {
     const { html, stylesheet, script } = new ViewerAssets();
     // The SVG namespace is an identifier for createElementNS, never fetched.
-    const assets = (html + stylesheet + script).replaceAll("http://www.w3.org/2000/svg", "");
+    // The footer's repository links are only followed when clicked, and are
+    // checked on their own below.
+    const assets = (html + stylesheet + script)
+      .replaceAll("http://www.w3.org/2000/svg", "")
+      .replace('href="https://github.com/shibbirweb/mcp-db-read-only"', "")
+      .replace('href="https://github.com/shibbirweb/mcp-db-read-only/issues"', "");
     assert.doesNotMatch(assets, /https?:\/\//);
+  });
+
+  // The viewer's own address can be a private host and port; a click on an
+  // outside link must not hand it to GitHub as the referrer.
+  test("the footer links to the repository and its issues in a new tab, without a referrer", () => {
+    const { html } = new ViewerAssets();
+    const links = [...html.matchAll(/<a [^>]*>/g)].map(([tag]) => tag);
+    assert.deepEqual(links, [
+      '<a class="star" href="https://github.com/shibbirweb/mcp-db-read-only" target="_blank" rel="noopener noreferrer">',
+      '<a class="issue" href="https://github.com/shibbirweb/mcp-db-read-only/issues" target="_blank" rel="noopener noreferrer">',
+    ]);
   });
 
   test("every code block carries its own copy icon", () => {

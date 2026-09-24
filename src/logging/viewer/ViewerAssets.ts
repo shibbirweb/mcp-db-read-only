@@ -56,6 +56,16 @@ const HTML = `<!doctype html>
   <div id="entries"></div>
   <nav class="pager" id="pager-bottom"></nav>
 </main>
+<footer>
+  <a class="star" href="https://github.com/shibbirweb/mcp-db-read-only" target="_blank" rel="noopener noreferrer">
+    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M8 .25a.75.75 0 0 1 .673.418l1.882 3.815 4.21.612a.75.75 0 0 1 .416 1.279l-3.046 2.97.719 4.192a.75.75 0 0 1-1.088.791L8 12.347l-3.766 1.98a.75.75 0 0 1-1.088-.79l.72-4.194L.818 6.374a.75.75 0 0 1 .416-1.28l4.21-.611L7.327.668A.75.75 0 0 1 8 .25Z"/></svg>
+    Star mcp-db-read-only on GitHub
+  </a>
+  <a class="issue" href="https://github.com/shibbirweb/mcp-db-read-only/issues" target="_blank" rel="noopener noreferrer">
+    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M8 9.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z"/><path d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0ZM1.5 8a6.5 6.5 0 1 0 13 0 6.5 6.5 0 0 0-13 0Z"/></svg>
+    Request a feature or report an issue
+  </a>
+</footer>
 </body>
 </html>
 `;
@@ -205,6 +215,22 @@ pre {
 .pager button[disabled] { opacity: .4; cursor: default; }
 .pager button.current { background: var(--accent); border-color: var(--accent); color: #fff; }
 .pager select { padding: 3px 8px; }
+footer { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; padding: 0 20px 28px; }
+footer a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 13px;
+  text-decoration: none;
+}
+footer a svg { fill: currentColor; }
+.star:hover { color: var(--warn); border-color: var(--warn); }
+.issue:hover { color: var(--accent); border-color: var(--accent); }
 .banner {
   display: block;
   width: 100%;

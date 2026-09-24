@@ -117,7 +117,7 @@ Decisions, and why:
 - **A taken port is reported, never fatal.** Another copy of the server in use by another chat is the usual cause, and this copy must still work as an MCP server.
 - **It never keeps the process alive.** The listening socket and each connected page are unref'd. The process therefore lives exactly as long as it would without the viewer; otherwise a client that died without SIGTERM would leave an orphan holding the port.
 - **Data is text, never markup.** The page builds every element with `textContent`. A row can contain `<script>`, and the page must show it, not run it. A unit test fails if the script ever uses `innerHTML`, `outerHTML`, `insertAdjacentHTML` or `document.write`. The Content-Security-Policy allows only the page's own script, stylesheet and event stream, as a second line.
-- **Self-contained.** No framework, no CDN, no web font; a test checks the assets contain no external URL. The page is strings in `ViewerAssets.ts`, so `tsc` alone ships it in every distribution.
+- **Self-contained.** No framework, no CDN, no web font; a test checks the assets contain no external URL. The exceptions are the footer's two links, to the repository and to its issues, which load nothing until clicked and open with `rel="noopener noreferrer"`, so the viewer's own address is never sent as the referrer. The page is strings in `ViewerAssets.ts`, so `tsc` alone ships it in every distribution.
 - **Reconnects without duplicates.** `EventSource` reconnects by itself after a restart, and the history replay would repeat entries, so the page skips any entry it has already shown.
 
 ## The log folder

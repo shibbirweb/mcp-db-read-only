@@ -6,6 +6,10 @@ Each release is published to npm and Docker Hub from the same tag. Where a versi
 
 ## [Unreleased]
 
+### Added
+
+- The log viewer's footer links to the GitHub repository, to star it, and to its issues page, to request a feature or report a problem. The links open in a new tab and send no referrer; the page still loads nothing from outside the viewer.
+
 ## [1.0.0]
 
 First stable release. Not yet published to npm, Docker Hub or the MCP Registry.

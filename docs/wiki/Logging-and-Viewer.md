@@ -91,6 +91,7 @@ If the port is already in use, the viewer stops with a message saying which prog
 - **Pause** stops page 1 updating while you read.
 - **Expand all** opens every call on the page.
 - Light or dark, following your system.
+- **Like it, or missing something?** The footer links to the GitHub repository, where you can give it a star, and to its issues page, to request a feature or report a problem.
 
 > **The viewer has no password.** It listens on every network interface, so anyone who can reach that port (for example, on the same Wi-Fi) can read the log while it runs. Use it on a network you trust, or add `--host 127.0.0.1` to limit it to your own computer.
 
