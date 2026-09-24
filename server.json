@@ -3,7 +3,7 @@
   "name": "io.github.shibbirweb/mcp-db-read-only",
   "title": "Databases (read-only, switchable)",
   "description": "Read-only SQL, MongoDB, Redis and Elasticsearch access, switchable mid-conversation.",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "websiteUrl": "https://github.com/shibbirweb/mcp-db-read-only#readme",
   "repository": {
     "url": "https://github.com/shibbirweb/mcp-db-read-only",
@@ -13,7 +13,7 @@
     {
       "registryType": "npm",
       "identifier": "@shibbirweb/mcp-db-read-only",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "transport": {
         "type": "stdio"
       },
@@ -121,7 +121,7 @@
     },
     {
       "registryType": "oci",
-      "identifier": "docker.io/shibbirweb/mcp-db-read-only:1.0.0",
+      "identifier": "docker.io/shibbirweb/mcp-db-read-only:1.1.0",
       "transport": {
         "type": "stdio"
       },

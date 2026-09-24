@@ -6,8 +6,8 @@ The image `shibbirweb/mcp-db-read-only` runs the same server with nothing else i
 | --- | --- |
 | `latest` | The newest release |
 | `1` | The newest 1.x release (recommended: new features and fixes, never a breaking change) |
-| `1.0` | The newest 1.0.x release |
-| `1.0.0` | Exactly that version |
+| `1.1` | The newest 1.1.x release |
+| `1.1.0` | Exactly that version |
 
 ## In your MCP client
 

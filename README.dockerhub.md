@@ -35,7 +35,7 @@ Works with Claude Desktop, Claude Code, and any other [MCP](https://modelcontext
 
 ## Supported tags
 
-`1.0.0`, `1.0`, `1`, `latest`, built for `linux/amd64` and `linux/arm64`.
+`1.1.0`, `1.1`, `1`, `latest`, built for `linux/amd64` and `linux/arm64`.
 
 ---
 
