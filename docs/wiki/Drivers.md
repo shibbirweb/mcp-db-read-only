@@ -23,6 +23,32 @@
 5. Least recently used drivers are closed once more than eight are open, bounding sockets at eight times the per-driver connection limit (three).
 6. `closeAll()` on SIGTERM closes every driver concurrently; closing never throws.
 
+```mermaid
+sequenceDiagram
+    participant T as Tool
+    participant P as DriverProvider
+    participant C as DriverCache
+    participant R as DriverRegistry
+    participant D as Driver
+    participant DB as Database
+
+    T->>P: driver for this call
+    P->>C: get(target)
+    alt cached under target.key(), same password
+        C-->>P: the existing driver
+    else not cached, or the password changed
+        C->>R: create(target)
+        R-->>C: new driver, no I/O yet
+        Note over C: over eight? close the least recently used
+        C-->>P: the new driver
+    end
+    P-->>T: driver of the right family
+    T->>D: first method call
+    D->>DB: LazyResource opens the client
+    DB-->>D: result
+    D-->>T: result
+```
+
 ## Per engine
 
 ### MySQL and MariaDB: `MySqlDriver`

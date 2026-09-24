@@ -96,7 +96,7 @@ sequenceDiagram
         T-->>C: isError, no connection used
     else allowed
         T->>D: query(sql)
-        D->>S: BEGIN READ ONLY; SET LOCAL ...
+        D->>S: BEGIN READ ONLY#59; SET LOCAL ...
         D->>S: the statement, extended protocol
         S-->>D: rows
         D->>S: ROLLBACK

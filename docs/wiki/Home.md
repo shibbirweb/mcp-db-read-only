@@ -39,14 +39,18 @@ The server speaks MCP over stdio. `ApplicationFactory` is the composition root: 
 
 ## Layers
 
-```
-        index.ts  ->  ApplicationFactory  ->  McpDbServer
-                              |
-                 builds and injects everything below
-                              |
-   tools/  ->  connections/ + drivers/ + validation/ + formatting/
-                              |
-                          domain/  (engine catalog, value objects)
+```mermaid
+flowchart TD
+    I["index.ts"] --> AF["ApplicationFactory"] --> S["McpDbServer"]
+    AF -.->|"builds and injects everything below"| T["tools/"]
+    T --> CX["connections/"]
+    T --> DR["drivers/"]
+    T --> VA["validation/"]
+    T --> FO["formatting/"]
+    CX --> DO["domain/<br/>engine catalog, value objects"]
+    DR --> DO
+    VA --> DO
+    FO --> DO
 ```
 
 Dependencies point inward. `domain/` imports nothing of ours; `validation/` and `formatting/` import only types and the domain; `tools/` never constructs a collaborator; only `ApplicationFactory` names a concrete driver.

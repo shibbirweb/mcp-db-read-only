@@ -39,6 +39,16 @@ Because `DB_PROFILES` is JSON inside a JSON string in most client configs, the i
 
 **Which one starts active:** `DB_DEFAULT_PROFILE` if it names a profile, otherwise one called `default`, otherwise the first one listed. `DB_URL` on its own becomes a profile called `default`.
 
+```mermaid
+flowchart TD
+    A{"Does DB_DEFAULT_PROFILE<br/>name a profile?"} -->|"yes"| P1["That profile"]
+    A -->|"no"| B{"Is there a profile<br/>called default?"}
+    B -->|"yes"| P2["default<br/>(this is where DB_URL goes)"]
+    B -->|"no"| C{"Is there any<br/>profile at all?"}
+    C -->|"yes"| P3["The first one listed"]
+    C -->|"no"| P4["None yet: ask the<br/>assistant to connect"]
+```
+
 A profile that can't be read (a typo in its URL, say) is skipped with a warning in the client's log; the others still load.
 
 ### Coming from mcp-mysql-read-only

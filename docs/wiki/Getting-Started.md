@@ -2,6 +2,18 @@
 
 This page takes you from nothing to asking your AI assistant questions about your database, in about five minutes.
 
+```mermaid
+flowchart LR
+    Y["You"] -->|"ask in plain words"| C["Your MCP client<br/>Claude Desktop, Claude Code, ..."]
+    C -->|"picks a tool"| S["mcp-db-read-only"]
+    S -->|"read-only query"| D[("Your database")]
+    D -->|"results"| S
+    S -->|"results"| C
+    C -->|"the answer"| Y
+```
+
+You set up the middle box once, in step 2. After that you only talk to the assistant.
+
 ## What you need
 
 - An MCP client: **Claude Desktop**, **Claude Code**, or any other client that supports MCP servers.

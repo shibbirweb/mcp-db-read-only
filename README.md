@@ -14,6 +14,14 @@ Point it at MySQL, PostgreSQL, SQLite, SQL Server, ClickHouse, MongoDB, Redis or
 - **No restart to switch.** Change database, server or engine by asking.
 - **Optional logging**, with a live page in your browser that shows every query as it happens.
 
+```mermaid
+flowchart LR
+    Y["You"] -->|"ask in plain words"| AI["Your AI assistant"]
+    AI -->|"tool call"| S["mcp-db-read-only"]
+    S -->|"read-only query"| DB[("Your databases")]
+    DB -->|"rows, documents, keys"| S
+```
+
 Works with Claude Desktop, Claude Code, and any other [MCP](https://modelcontextprotocol.io) client.
 
 ---
@@ -250,6 +258,13 @@ Inside Docker, use `host.docker.internal` instead of `localhost` to reach a data
 
 Turn on logging to keep a record of every query the assistant runs, and see them live in your browser.
 
+```mermaid
+flowchart LR
+    S["mcp-db-read-only<br/>(in your AI client)"] -->|"one file per call"| F[("Log folder<br/>DB_LOG_DIR")]
+    F --> V["viewer command<br/>(in a terminal)"]
+    V -->|"live"| B["Your browser"]
+```
+
 **1. Save logs to a folder** by adding this to the server's `env`:
 
 ```json
@@ -275,6 +290,15 @@ Passwords are never written to the logs. More in the [Logging guide](https://git
 ## Is it really read-only?
 
 Yes, in two independent ways, so a mistake in one is caught by the other:
+
+```mermaid
+flowchart LR
+    Q["The assistant<br/>writes a query"] --> C{"1. Checked by<br/>this server:<br/>only a read?"}
+    C -->|"no"| R1["Refused,<br/>with the reason"]
+    C -->|"yes"| D["2. Sent to the database<br/>in read-only mode"]
+    D -->|"a read"| A["The answer"]
+    D -->|"a write that<br/>slipped through"| R2["Refused by<br/>the database"]
+```
 
 1. **Before anything is sent**, every query is checked. Only reads are allowed: `SELECT` and friends for SQL, read commands for Redis, searches for Elasticsearch, and no `$out` or `$merge` for MongoDB.
 2. **The database is told to refuse writes too**, wherever it supports that: read-only sessions on MySQL, read-only transactions on PostgreSQL, a read-only file on SQLite, and so on.

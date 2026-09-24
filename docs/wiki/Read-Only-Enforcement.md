@@ -2,6 +2,16 @@
 
 Every engine is kept read-only by two independent layers. **Layer one** runs in the tools, before a driver is touched, so a rejected call costs no connection. **Layer two** runs in the driver, and is enforced by the database server itself wherever the engine offers a way. The layers are independent on purpose: a bug in either one alone must not become a write.
 
+```mermaid
+flowchart LR
+    IN["Tool input"] --> L1{"<b>Layer one</b><br/>in the tool"}
+    L1 -->|"refused"| E1["Tool error,<br/>no connection used"]
+    L1 -->|"passes"| DRV["Driver"]
+    DRV --> L2{"<b>Layer two</b><br/>database server,<br/>or structure"}
+    L2 -->|"a write"| E2["Refused<br/>or rolled back"]
+    L2 -->|"a read"| OK["Result"]
+```
+
 | Engine | Layer one | Layer two | Proved by |
 | --- | --- | --- | --- |
 | MySQL, MariaDB | SQL validator (`mysql` dialect) | `SET SESSION TRANSACTION READ ONLY` per connection; `multipleStatements: false` | a write sent to `MySqlDriver.query` fails with error 1792 |
@@ -18,6 +28,18 @@ The rightmost column matters. Each integration fixture sends a write **straight 
 ## The SQL validator
 
 `ReadOnlyQueryValidator` is one class used with five dialects (`src/validation/sql/SqlDialect.ts`). The rules are the same everywhere; the dialect supplies the lexing rules and word lists.
+
+```mermaid
+flowchart TD
+    Q["SQL text"] --> SK["<b>SqlSkeletonizer</b><br/>blanks literals, quoted identifiers and comments,<br/>reports ambiguities"]
+    SK --> RULES
+    subgraph RULES["The rules, in order"]
+        R1["EmptyQueryRule"] --> R2["AmbiguousSyntaxRule"] --> R3["SingleStatementRule"]
+        R3 --> R4["LeadingKeywordRule"] --> R5["SmuggledWriteRule"] --> R6["ForbiddenPatternRule"]
+    end
+    RULES -->|"all pass"| OK["Valid: handed to the driver"]
+    RULES -.->|"the first to object"| X["Refused, with that rule's message"]
+```
 
 ### Step one: skeletonize, exactly as the server lexes
 
@@ -78,6 +100,29 @@ Beyond that, the driver only ever calls `find`, `aggregate`, `countDocuments`, `
 
 - **Layer one, `RedisCommandValidator`**, is an allowlist. Deliberately excluded: `KEYS` (blocks the server; `SCAN` is the answer), `CONFIG GET` (returns `requirepass`), `PFCOUNT` (flagged as a write, since it updates a cached cardinality), `SORT` (can `STORE`; `SORT_RO` is allowed), blocking reads. Container commands are allowed per subcommand: `OBJECT ENCODING` yes, anything unlisted no.
 - **Layer two, `RedisCommandFlagsGuard`**, asks the server. `COMMAND INFO` reports each command's flags; a command is sent only if the server flags it `readonly` and not `write`. This is the server's own classification, entirely independent of the list written here. It **fails closed**: if `COMMAND` is renamed, disabled or denied by an ACL, the command is refused with a message saying why, rather than sent on the strength of the allowlist alone.
+
+```mermaid
+sequenceDiagram
+    participant T as redis_command
+    participant V as RedisCommandValidator
+    participant G as RedisCommandFlagsGuard
+    participant R as Redis
+
+    T->>V: command, args
+    alt not on the allowlist
+        V-->>T: refused (layer one)
+    else allowed
+        T->>G: command, in the driver
+        G->>R: COMMAND INFO command
+        R-->>G: flags
+        alt flagged readonly and not write
+            G->>R: the command
+            R-->>T: reply
+        else anything else, or COMMAND INFO unavailable
+            G-->>T: refused, saying why (layer two)
+        end
+    end
+```
 
 The browse tools on Redis use fixed read commands chosen in the driver (`SCAN`, `TYPE`, `TTL`, `HSCAN`, `LRANGE`...), so they do not go through the guard.
 

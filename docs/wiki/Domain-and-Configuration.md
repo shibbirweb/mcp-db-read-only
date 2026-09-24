@@ -46,4 +46,24 @@ Nothing here is fatal and nothing is logged: problems come back as `warnings`, w
 
 Unchanged in shape from the MySQL-only server. The registry holds profiles and the active target and does no I/O. The manager is the only thing that changes the active target, and always **verifies, then commits**: the candidate's driver is opened and checked first, so a failed switch leaves the previous connection working. Switching across engines is an ordinary switch; nothing in either class knows what engine a target is.
 
+```mermaid
+sequenceDiagram
+    participant T as use_database, use_connection, connect
+    participant M as ConnectionManager
+    participant C as DriverCache
+    participant D as Candidate driver
+    participant R as ConnectionRegistry
+
+    T->>M: switch to a candidate target
+    M->>C: verify(candidate)
+    C->>D: verify()
+    alt verified
+        M->>R: commit: candidate becomes active
+        M-->>T: the new target
+    else fails
+        C->>C: evict and close the candidate
+        M-->>T: error, the registry untouched
+    end
+```
+
 Starting profile: the configured default if it exists, else `default`, else the first defined, else none.

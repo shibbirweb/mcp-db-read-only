@@ -24,7 +24,22 @@ An optional log of every tool call: its input, every statement the drivers sent 
 
 `ApplicationFactory.createCallLog` builds either one `CallLogger`, passed as the observer to the server and as the tracer to every driver, or the two silent stand-ins. Nothing else in the codebase knows whether logging is on.
 
-`CallLogger` builds each record once, redacted, and hands the same object to every channel: always a `TextLogChannel` (stderr or file), and the `LiveLogViewer` when `DB_LOG_PORT` is set. A channel that fails is switched off on its own; the others carry on.
+`CallLogger` builds each record once, redacted, and hands the same object to every channel: a `TextLogChannel` for `DB_LOG` or `DB_LOG_FILE`, a `FolderLogChannel` for `DB_LOG_DIR`, and, when `DB_LOG_PORT` is set without a folder, the `MemoryLogStore` the viewer reads. The `LiveLogViewer` is not a channel itself: it reads a `LogStore`. A channel that fails is switched off on its own; the others carry on.
+
+```mermaid
+flowchart LR
+    BT["BaseTool"] -->|"observe"| CL["<b>CallLogger</b><br/>one redacted record per call"]
+    DR["Drivers"] -->|"trace"| CL
+    CL -->|"DB_LOG or DB_LOG_FILE"| TC["TextLogChannel"]
+    TC --> SK["StderrSink or FileSink"]
+    CL -->|"DB_LOG_DIR"| FC["FolderLogChannel"]
+    FC --> F[("one JSON file<br/>per call")]
+    CL -->|"DB_LOG_PORT,<br/>no folder"| MS["MemoryLogStore"]
+    F --> FS["FolderLogStore"]
+    FS --> LV["LiveLogViewer"]
+    MS --> LV
+    LV -->|"/events, /api/entries"| P["Browser page"]
+```
 
 ## How a statement finds its call
 

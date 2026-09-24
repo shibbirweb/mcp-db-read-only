@@ -35,6 +35,19 @@ The image `shibbirweb/mcp-db-read-only` runs the same server with nothing else i
 
 Inside a container, `localhost` means the container itself. Use **`host.docker.internal`** instead, and keep the `--add-host host.docker.internal:host-gateway` line (Docker Desktop has it built in, Linux needs the flag).
 
+```mermaid
+flowchart LR
+    subgraph computer["Your computer"]
+        DB[("Your database<br/>port 5432")]
+        subgraph container["Docker container"]
+            S["mcp-db-read-only"]
+            L["localhost<br/>(the container itself)"]
+        end
+    end
+    S -->|"host.docker.internal:5432<br/>reaches it"| DB
+    S -.->|"localhost:5432<br/>finds nothing"| L
+```
+
 A database in another container? Put both on one Docker network and use the container's name as the host.
 
 ## SQLite files

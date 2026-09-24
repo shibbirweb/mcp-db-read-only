@@ -27,6 +27,16 @@ The SQL validator has the largest suite, because it is the most security-critica
 
 ## Integration tests
 
+```mermaid
+flowchart TD
+    E["test/integration/postgres.test.js<br/><i>one entry file per engine</i>"] --> SU
+    FX["test/helpers/engines/postgres.js<br/><i>seed data, expectations, engine tests</i>"] --> SU
+    SU["<b>engineSuite.js</b><br/>browsing, switching, per-call override"] --> MC["McpClient<br/>over stdio"]
+    MC --> SRV["the built server<br/>dist/index.js"] --> DB[("the engine")]
+    FX -->|"layer-two proof:<br/>a write straight to the driver"| DB
+    SU -.->|"engine unreachable"| SK["skipped, printing<br/>'not reachable'<br/>(a failure in CI)"]
+```
+
 Every engine runs the same suite, `engineSuite.js`, driven by a fixture that supplies seed data, expectations and engine-specific tests. The shared part covers browsing, database switching and the per-call override; the fixture adds the query tools and, for every engine, a **layer-two proof**: a write sent straight to the driver, bypassing every validator, which must be refused or undone by the server.
 
 Fixtures create and drop only data named `mcp_test*`. The Redis fixture uses databases 14 and 15 and deletes only its own prefixed keys, so running the suite against a developer's own Redis loses nothing.

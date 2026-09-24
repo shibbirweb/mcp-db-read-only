@@ -2,18 +2,18 @@
 
 ## Hierarchy
 
-```
-BaseTool                         register + invoke fixed; turns every throw into a tool error
- |-- CurrentConnectionTool, ListConnectionsTool, ListDatabasesTool
- |-- UseDatabaseTool, UseConnectionTool, ConnectTool
- '-- DatabaseScopedTool          resolves the target, checks the family, validates `database`
-      |-- ListTablesTool, DescribeTableTool, GetTableIndexesTool,
-      |   GetForeignKeysTool, GetTableSampleTool           (family: any)
-      |-- RunQueryTool                                     (family: sql)
-      |-- DocumentTool                                     (family: document)
-      |    '-- FindDocumentsTool, AggregateTool, CountDocumentsTool, DistinctValuesTool
-      |-- SearchTool                                       (family: search)
-      '-- RedisCommandTool                                 (family: keyvalue)
+```mermaid
+flowchart TD
+    BT["<b>BaseTool</b><br/><i>register + invoke fixed;<br/>turns every throw into a tool error</i>"]
+    BT --> SW["UseDatabaseTool<br/>UseConnectionTool<br/>ConnectTool"]
+    BT --> CN["CurrentConnectionTool<br/>ListConnectionsTool<br/>ListDatabasesTool"]
+    BT --> DST["<b>DatabaseScopedTool</b><br/><i>resolves the target, checks the family,<br/>validates database</i>"]
+    DST --> RQ["RunQueryTool<br/><i>family: sql</i>"]
+    DST --> DT["<b>DocumentTool</b><br/><i>family: document</i>"]
+    DT --> DTS["FindDocumentsTool<br/>AggregateTool<br/>CountDocumentsTool<br/>DistinctValuesTool"]
+    DST --> SE["SearchTool<br/><i>family: search</i>"]
+    DST --> RC["RedisCommandTool<br/><i>family: keyvalue</i>"]
+    DST --> BR["ListTablesTool, DescribeTableTool,<br/>GetTableIndexesTool, GetForeignKeysTool,<br/>GetTableSampleTool<br/><i>family: any</i>"]
 ```
 
 `family` is a field on `DatabaseScopedTool`, null for the browse tools. A query tool called against the wrong engine throws `EngineMismatchError` before anything is acquired, and the message lists the tools that fit, taken from `QUERY_TOOLS` in `src/tools/QueryTools.ts`.

@@ -22,6 +22,11 @@ Point it at MySQL, PostgreSQL, SQLite, SQL Server, ClickHouse, MongoDB, Redis or
 - **No restart to switch.** Change database, server or engine by asking.
 - **Optional logging**, with a live page in your browser that shows every query as it happens.
 
+```text
+You  --ask in plain words-->  Your AI assistant  --tool call-->  mcp-db-read-only  --read-only query-->  Your databases
+                                                                  mcp-db-read-only  <--rows, documents, keys--
+```
+
 Works with Claude Desktop, Claude Code, and any other [MCP](https://modelcontextprotocol.io) client.
 
 **Source and full documentation: [github.com/shibbirweb/mcp-db-read-only](https://github.com/shibbirweb/mcp-db-read-only)**
@@ -264,6 +269,17 @@ Inside Docker, use `host.docker.internal` instead of `localhost` to reach a data
 
 Turn on logging to keep a record of every query the assistant runs, and see them live in your browser.
 
+```text
+The assistant writes a query
+             |
+             v
+1. Checked by this server: only a read?
+     no  -->  Refused, with the reason
+     yes -->  2. Sent to the database in read-only mode
+                   a read                         -->  The answer
+                   a write that slipped through   -->  Refused by the database
+```
+
 **1. Save logs to a folder** by adding this to the server's `env`:
 
 ```json
@@ -289,6 +305,11 @@ Passwords are never written to the logs. More in the [Logging guide](https://git
 ## Is it really read-only?
 
 Yes, in two independent ways, so a mistake in one is caught by the other:
+
+```text
+mcp-db-read-only  --one file per call-->  Log folder (DB_LOG_DIR)  -->  viewer command  --live-->  Your browser
+(in your AI client)                                                     (in a terminal)
+```
 
 1. **Before anything is sent**, every query is checked. Only reads are allowed: `SELECT` and friends for SQL, read commands for Redis, searches for Elasticsearch, and no `$out` or `$merge` for MongoDB.
 2. **The database is told to refuse writes too**, wherever it supports that: read-only sessions on MySQL, read-only transactions on PostgreSQL, a read-only file on SQLite, and so on.

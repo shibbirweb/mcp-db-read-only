@@ -17,6 +17,20 @@ Logging is **off unless you turn it on**. When it's on, every tool call is recor
 
 This is the recommended setup.
 
+```mermaid
+flowchart LR
+    subgraph client["Your MCP client"]
+        S1["server copy"]
+        S2["another copy"]
+    end
+    S1 -->|"one file per call"| F[("Log folder<br/>DB_LOG_DIR")]
+    S2 -->|"one file per call"| F
+    F -->|"checked every second"| V["viewer command<br/>(separate terminal)"]
+    V -->|"live page"| B["Your browser<br/>http://127.0.0.1:4800"]
+```
+
+The servers only write files; the viewer only reads them. Starting or stopping the viewer never affects your assistant.
+
 ### 1. Tell the server to save logs
 
 Add `DB_LOG_DIR` to the server's `env`:

@@ -19,6 +19,13 @@ There are 18 tools in three groups.
 
 Every switch is **checked before it takes effect**. If the database doesn't exist or the server can't be reached, you get an error and the previous connection keeps working.
 
+```mermaid
+flowchart LR
+    A["You ask to switch"] --> B["The new connection<br/>is opened and checked"]
+    B -->|"works"| C["Switched"]
+    B -->|"fails"| D["Error shown,<br/>previous connection kept"]
+```
+
 Nothing needs a restart. A connection opened with `connect` is forgotten when the client closes; put it in `DB_PROFILES` to keep it.
 
 ```json
