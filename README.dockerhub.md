@@ -66,84 +66,151 @@ That's it. You never need to restart again to change database; just ask the assi
 
 ## Examples for each database
 
-Each example shows the connection URL to use as `DB_URL`, and a few things you can ask.
+Each database has a URL **format**, then a real **example** to copy and change. Put the finished URL in `DB_URL`.
+
+Replace each `[PLACEHOLDER]` with your own value:
+
+| Placeholder | What to put there |
+| --- | --- |
+| `[USER]` | The database user name |
+| `[PASSWORD]` | That user's password |
+| `[HOST]` | The server's address, e.g. `localhost` or `db.example.com` |
+| `[PORT]` | The server's port. Optional: leave out `:[PORT]` to use the usual one shown for each database |
+| `[DATABASE]` | The database name. Optional for most: leave it out and ask the assistant to list them |
+
+No password? Leave out `:[PASSWORD]`. No user either? Leave out `[USER]:[PASSWORD]@` entirely.
 
 ### MySQL and MariaDB
 
+Format (usual port 3306):
+
+```text
+mysql://[USER]:[PASSWORD]@[HOST]:[PORT]/[DATABASE]
+mariadb://[USER]:[PASSWORD]@[HOST]:[PORT]/[DATABASE]
+```
+
+Example:
+
 ```text
 mysql://readonly:secret@localhost:3306/shop
-mariadb://readonly:secret@db.example.com:3306/shop
 ```
 
 > "List the tables in shop." · "Describe the orders table." · "What were last month's top 10 products by revenue?"
 
 ### PostgreSQL
 
+Format (usual port 5432). Add `?sslmode=require` to use TLS:
+
+```text
+postgres://[USER]:[PASSWORD]@[HOST]:[PORT]/[DATABASE]
+```
+
+Example:
+
 ```text
 postgres://readonly:secret@localhost:5432/myapp
-postgres://readonly:secret@db.example.com:5432/myapp?sslmode=require
 ```
 
 > "Which tables are in the reporting schema?" · "Show the foreign keys on invoices." · "Count signups per day this week."
 
 ### SQLite
 
+Format (three slashes, then the full path to the file):
+
+```text
+sqlite:///[PATH_TO_FILE]
+```
+
+Example:
+
 ```text
 sqlite:///Users/me/data/app.db
 ```
 
-Three slashes, then the full path to the file. The file is opened read-only.
+The file is opened read-only.
 
 > "What tables does this file have?" · "Show 10 rows from notes."
 
 ### SQL Server (and Azure SQL)
 
+Format (usual port 1433). Add `?trustServerCertificate=true` for a local server with a self-signed certificate:
+
 ```text
-mssql://readonly:secret@localhost:1433/Sales?trustServerCertificate=true
-mssql://readonly@myserver.database.windows.net:1433/Sales
+mssql://[USER]:[PASSWORD]@[HOST]:[PORT]/[DATABASE]
 ```
 
-Use `trustServerCertificate=true` for a local development server with a self-signed certificate.
+Example:
+
+```text
+mssql://readonly:secret@localhost:1433/Sales?trustServerCertificate=true
+```
 
 > "List the tables in Sales." · "Show the top 5 customers by order total." (SQL Server uses `TOP 5`, not `LIMIT`; the assistant knows.)
 
 ### ClickHouse
 
+Format (usual port 8123, or 8443 with `clickhouse+https`):
+
+```text
+clickhouse://[USER]:[PASSWORD]@[HOST]:[PORT]/[DATABASE]
+clickhouse+https://[USER]:[PASSWORD]@[HOST]:[PORT]/[DATABASE]
+```
+
+Example:
+
 ```text
 clickhouse://reader:secret@localhost:8123/analytics
-clickhouse+https://reader:secret@my-cluster.clickhouse.cloud:8443/analytics
 ```
 
 > "How many events per hour did we have yesterday?" · "What is the sorting key of the events table?"
 
 ### MongoDB
 
+Format (usual port 27017). Use `mongodb+srv` for MongoDB Atlas, with no port:
+
+```text
+mongodb://[USER]:[PASSWORD]@[HOST]:[PORT]/[DATABASE]?authSource=admin
+mongodb+srv://[USER]:[PASSWORD]@[CLUSTER_HOST]/[DATABASE]
+```
+
+Example:
+
 ```text
 mongodb://reader:secret@localhost:27017/myapp?authSource=admin
-mongodb+srv://reader:secret@cluster0.abcde.mongodb.net/myapp
 ```
 
 > "What collections are in myapp?" · "What fields do documents in users have?" · "Find the 5 most recent orders over 100." · "Count users by country."
 
 ### Redis (and Valkey, KeyDB)
 
+Format (usual port 6379). `[DB_NUMBER]` is the database number, 0 if left out; `rediss` means TLS:
+
 ```text
-redis://localhost:6379/0
-redis://reader:secret@cache.example.com:6379/0
-rediss://reader:secret@cache.example.com:6380/0
+redis://[USER]:[PASSWORD]@[HOST]:[PORT]/[DB_NUMBER]
+rediss://[USER]:[PASSWORD]@[HOST]:[PORT]/[DB_NUMBER]
 ```
 
-The number at the end is the database. `rediss://` means TLS.
+Example:
+
+```text
+redis://localhost:6379/0
+```
 
 > "Which keys start with session:?" · "What's inside user:42?" · "How long until cache:home expires?"
 
 ### Elasticsearch and OpenSearch
 
+Format (usual port 9200, no database). Add `+https` for TLS, or `?api_key=[API_KEY]` instead of a user and password:
+
 ```text
-elasticsearch://elastic:secret@localhost:9200
+elasticsearch://[USER]:[PASSWORD]@[HOST]:[PORT]
+opensearch://[USER]:[PASSWORD]@[HOST]:[PORT]
+```
+
+Example:
+
+```text
 elasticsearch+https://elastic:secret@search.example.com:9200
-opensearch+https://admin:secret@search.example.com:9200
-elasticsearch+https://search.example.com:9200?api_key=YOUR_KEY
 ```
 
 > "What indices do we have?" · "Find error logs from the last hour." · "How many documents are in logs-2026.09?"

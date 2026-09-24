@@ -2,6 +2,17 @@
 
 One section per database: how to write the connection URL, how to create a read-only account, what the tools show there, and examples.
 
+**Reading the formats.** Each section shows the URL format with `[PLACEHOLDERS]`, then a real example. Replace each placeholder with your own value:
+
+| Placeholder | What to put there |
+| --- | --- |
+| `[USER]`, `[PASSWORD]` | The database account. Leave out `:[PASSWORD]` if there is none, or `[USER]:[PASSWORD]@` if there is no login at all |
+| `[HOST]` | The server's address, e.g. `localhost` or `db.example.com` |
+| `[PORT]` | The server's port. Optional: leave out `:[PORT]` to use the usual one given in each section |
+| `[DATABASE]` | The database name. Optional for most engines |
+
+If a password contains `@`, `/`, `#`, `:` or `?`, leave it out of the URL and set it with `DB_PASSWORD` instead.
+
 Two things are the same everywhere:
 
 - **Browse tools work on every database**: `list_tables`, `describe_table`, `get_table_sample`, and, where the database has them, `get_table_indexes` and `get_foreign_keys`. The [Using the Tools](Using-the-Tools) page explains each one.
@@ -16,9 +27,11 @@ Two things are the same everywhere:
 **URL**
 
 ```text
-mysql://USER:PASSWORD@HOST:3306/DATABASE
-mariadb://USER:PASSWORD@HOST:3306/DATABASE
+mysql://[USER]:[PASSWORD]@[HOST]:[PORT]/[DATABASE]
+mariadb://[USER]:[PASSWORD]@[HOST]:[PORT]/[DATABASE]
 ```
+
+The usual port is **3306**. Example: `mysql://readonly:secret@localhost:3306/shop`
 
 | Option | Meaning |
 | --- | --- |
@@ -61,9 +74,11 @@ Also works with hosted and extended PostgreSQL, such as Supabase, Neon, Timescal
 **URL**
 
 ```text
-postgres://USER:PASSWORD@HOST:5432/DATABASE
-postgresql://USER:PASSWORD@HOST:5432/DATABASE
+postgres://[USER]:[PASSWORD]@[HOST]:[PORT]/[DATABASE]
+postgresql://[USER]:[PASSWORD]@[HOST]:[PORT]/[DATABASE]
 ```
+
+The usual port is **5432**. Example: `postgres://readonly:secret@localhost:5432/myapp?sslmode=require`
 
 | Option | Meaning |
 | --- | --- |
@@ -113,8 +128,10 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO readonly;
 **URL**
 
 ```text
-sqlite:///ABSOLUTE/PATH/TO/file.db
+sqlite:///[PATH_TO_FILE]
 ```
+
+Example: `sqlite:///Users/me/data/app.db`
 
 Three slashes before an absolute path. A relative path (`sqlite://data/app.db`) is resolved from the folder the server starts in, which is easy to get wrong, so prefer absolute paths.
 
@@ -147,9 +164,11 @@ Not needed: the file is always opened read-only. Make sure the server can read t
 **URL**
 
 ```text
-mssql://USER:PASSWORD@HOST:1433/DATABASE
-sqlserver://USER:PASSWORD@HOST:1433/DATABASE
+mssql://[USER]:[PASSWORD]@[HOST]:[PORT]/[DATABASE]
+sqlserver://[USER]:[PASSWORD]@[HOST]:[PORT]/[DATABASE]
 ```
+
+The usual port is **1433**. Example: `mssql://readonly:secret@localhost:1433/Sales?trustServerCertificate=true`
 
 | Option | Meaning |
 | --- | --- |
@@ -195,9 +214,11 @@ Connects over the HTTP interface, which is what ClickHouse Cloud and most hosted
 **URL**
 
 ```text
-clickhouse://USER:PASSWORD@HOST:8123/DATABASE
-clickhouse+https://USER:PASSWORD@HOST:8443/DATABASE
+clickhouse://[USER]:[PASSWORD]@[HOST]:[PORT]/[DATABASE]
+clickhouse+https://[USER]:[PASSWORD]@[HOST]:[PORT]/[DATABASE]
 ```
+
+The usual port is **8123**, or **8443** with `clickhouse+https`. Example: `clickhouse://reader:secret@localhost:8123/analytics`
 
 The database defaults to `default`.
 
@@ -236,10 +257,12 @@ The last grant lets `get_table_indexes` show skipping indices; everything else w
 **URL**
 
 ```text
-mongodb://USER:PASSWORD@HOST:27017/DATABASE?authSource=admin
-mongodb://USER:PASSWORD@host1:27017,host2:27017/DATABASE?replicaSet=rs0
-mongodb+srv://USER:PASSWORD@cluster0.abcde.mongodb.net/DATABASE
+mongodb://[USER]:[PASSWORD]@[HOST]:[PORT]/[DATABASE]?authSource=admin
+mongodb://[USER]:[PASSWORD]@[HOST1]:[PORT],[HOST2]:[PORT]/[DATABASE]?replicaSet=[REPLICA_SET]
+mongodb+srv://[USER]:[PASSWORD]@[CLUSTER_HOST]/[DATABASE]
 ```
+
+The usual port is **27017**; `mongodb+srv` (MongoDB Atlas) takes no port. Example: `mongodb://reader:secret@localhost:27017/myapp?authSource=admin`
 
 Any MongoDB connection option can go in the query string. `authSource=admin` is needed when the user was created in the `admin` database, which is the usual case.
 
@@ -289,11 +312,13 @@ Filters use MongoDB's Extended JSON, so ids and dates work: `{"_id": {"$oid": "6
 **URL**
 
 ```text
-redis://HOST:6379/0
-redis://:PASSWORD@HOST:6379/0
-redis://USER:PASSWORD@HOST:6379/0
-rediss://USER:PASSWORD@HOST:6380/0
+redis://[HOST]:[PORT]/[DB_NUMBER]
+redis://:[PASSWORD]@[HOST]:[PORT]/[DB_NUMBER]
+redis://[USER]:[PASSWORD]@[HOST]:[PORT]/[DB_NUMBER]
+rediss://[USER]:[PASSWORD]@[HOST]:[PORT]/[DB_NUMBER]
 ```
+
+The usual port is **6379**. Example: `redis://reader:secret@localhost:6379/0`
 
 The number at the end is the database (0 by default). `rediss://` uses TLS.
 
@@ -333,12 +358,14 @@ Read commands only, such as `GET`, `MGET`, `HGET`, `HGETALL`, `LRANGE`, `SMEMBER
 **URL**
 
 ```text
-elasticsearch://USER:PASSWORD@HOST:9200
-elasticsearch+https://USER:PASSWORD@HOST:9200
-opensearch://USER:PASSWORD@HOST:9200
-opensearch+https://USER:PASSWORD@HOST:9200
-elasticsearch+https://HOST:9200?api_key=BASE64_API_KEY
+elasticsearch://[USER]:[PASSWORD]@[HOST]:[PORT]
+elasticsearch+https://[USER]:[PASSWORD]@[HOST]:[PORT]
+opensearch://[USER]:[PASSWORD]@[HOST]:[PORT]
+opensearch+https://[USER]:[PASSWORD]@[HOST]:[PORT]
+elasticsearch+https://[HOST]:[PORT]?api_key=[API_KEY]
 ```
+
+The usual port is **9200**. Example: `elasticsearch+https://elastic:secret@search.example.com:9200`
 
 There is no database part. `?api_key=` authenticates with an API key, which is never shown or logged.
 

@@ -13,8 +13,10 @@ This page takes you from nothing to asking your AI assistant questions about you
 The server connects using a URL. It looks like this:
 
 ```text
-engine://user:password@host:port/database
+[ENGINE]://[USER]:[PASSWORD]@[HOST]:[PORT]/[DATABASE]
 ```
+
+Replace each `[PLACEHOLDER]` with your own value. `[PORT]` and `[DATABASE]` are usually optional, and so is `[USER]:[PASSWORD]@` if the database has no login.
 
 For example:
 
