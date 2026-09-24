@@ -1,0 +1,128 @@
+name: Publish to npm
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to publish (e.g. v1.0.0). Defaults to the current ref."
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  # The credential. npm exchanges this OIDC token for publish rights, and it
+  # is also what lets npm attach a provenance attestation, so without it the
+  # publish step has no way to authenticate at all.
+  id-token: write
+
+jobs:
+  # Publishing something that was never tested is how a broken release
+  # reaches users. This is the full CI workflow, every engine included, run
+  # against the exact ref being published; nothing below starts unless it is
+  # green.
+  verify:
+    name: Verify before publishing
+    uses: ./.github/workflows/ci.yml
+    with:
+      ref: ${{ inputs.tag || github.ref }}
+
+  # npm takes its version from package.json rather than from the tag, so a
+  # mismatch here does not fail the publish: it silently ships the wrong
+  # version under the right release notes.
+  check-tag:
+    name: Check the tag matches package.json
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Compare
+        if: github.event_name == 'release'
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME#v}"
+          pkg=$(node -p "require('./package.json').version")
+          echo "tag=$tag package.json=$pkg"
+          if [ "$tag" != "$pkg" ]; then
+            echo "::error::Release tag $GITHUB_REF_NAME does not match package.json version $pkg"
+            exit 1
+          fi
+
+  publish:
+    name: Publish package
+    needs: [verify, check-tag]
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      # Deliberately without the npm cache: a release build should resolve
+      # everything fresh rather than reuse whatever a previous run left behind.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      # Node 22 ships npm 10, and trusted publishing needs 11.5.1 or newer.
+      # Without this the OIDC path fails with a plain "need auth".
+      - name: Use an npm that supports trusted publishing
+        run: |
+          npm install -g npm@latest
+          npm --version
+
+      - run: npm ci --no-audit --no-fund
+
+      # A re-run of a release that already published would otherwise fail deep
+      # inside npm with E403, which reads like a credentials problem.
+      - name: Check this version is not already published
+        run: |
+          set -euo pipefail
+          name=$(node -p "require('./package.json').name")
+          version=$(node -p "require('./package.json').version")
+          if npm view "$name@$version" version > /dev/null 2>&1; then
+            echo "::error::$name@$version is already on npm. Bump the version; npm releases cannot be replaced."
+            exit 1
+          fi
+          echo "$name@$version is unpublished, continuing."
+
+      # A prerelease must not become what `npx @shibbirweb/mcp-db-read-only` resolves
+      # to, which mirrors how `latest` is withheld from prereleases on Docker
+      # Hub. Anyone who wants one asks for it by name: npm i pkg@next.
+      - name: Choose the dist-tag
+        id: disttag
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "release" ] && [ "${{ github.event.release.prerelease }}" = "true" ]; then
+            echo "value=next" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=latest" >> "$GITHUB_OUTPUT"
+          fi
+
+      # No token anywhere: npm authenticates this run over OIDC against the
+      # trusted publisher configured for the package, which must grant the
+      # `npm publish` permission. Provenance is attached automatically for a
+      # public package from a public repository, so --provenance is redundant.
+      #
+      # prepack rebuilds dist/ here, which is what makes the tarball
+      # self-consistent: dist/ is gitignored, so nothing stale can be shipped.
+      - name: Publish
+        run: npm publish --access public --tag "${{ steps.disttag.outputs.value }}"
+
+      - name: Summary
+        run: |
+          {
+            echo "### Published to npm"
+            echo
+            echo '```'
+            echo "$(node -p "require('./package.json').name")@$(node -p "require('./package.json').version")"
+            echo '```'
+            echo
+            echo "dist-tag: ${{ steps.disttag.outputs.value }}"
+            echo "auth: trusted publishing (OIDC)"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,96 @@
+name: Publish to MCP Registry
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to publish (e.g. v1.0.0). Defaults to the current ref."
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  # The credential. mcp-publisher exchanges this OIDC token for the
+  # io.github.shibbirweb/* namespace, so no secret is involved.
+  id-token: write
+
+jobs:
+  publish:
+    name: Publish server.json
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # The registry does not host anything. It verifies ownership by reading
+      # mcpName out of the published npm package and the
+      # io.modelcontextprotocol.server.name annotation off the published image,
+      # so both have to exist before this runs. All three workflows start from
+      # the same release event and this one is the slowest to become valid, so
+      # it waits rather than racing them and failing on a technicality.
+      - name: Wait for the npm package and the image to be published
+        run: |
+          set -euo pipefail
+          npm_package="$(node -p "require('./package.json').name")@$(node -p "require('./package.json').version")"
+          image=$(node -p "require('./server.json').packages.find(p => p.registryType === 'oci').identifier.replace(/^docker\.io\//, '')")
+          repository="${image%:*}"
+          tag="${image##*:}"
+          echo "waiting for $npm_package and docker.io/$image"
+
+          for attempt in $(seq 1 30); do
+            npm_ready=no
+            image_ready=no
+
+            if npm view "$npm_package" version > /dev/null 2>&1; then
+              npm_ready=yes
+            fi
+            # No -S: a 404 here is the expected "not yet", and its curl error
+            # line would read like a failure in the log on every attempt.
+            if curl -fs -o /dev/null "https://hub.docker.com/v2/repositories/$repository/tags/$tag"; then
+              image_ready=yes
+            fi
+
+            echo "attempt $attempt: npm=$npm_ready image=$image_ready"
+            if [ "$npm_ready" = yes ] && [ "$image_ready" = yes ]; then
+              exit 0
+            fi
+            sleep 20
+          done
+
+          echo "::error::Gave up waiting. npm=$npm_ready image=$image_ready. Re-run this workflow once both have published."
+          exit 1
+
+      - name: Install mcp-publisher
+        run: |
+          set -euo pipefail
+          curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
+          ./mcp-publisher --help > /dev/null
+
+      - name: Authenticate over OIDC
+        run: ./mcp-publisher login github-oidc
+
+      # server.json is versioned in the repository and kept in step with
+      # package.json by scripts/sync-version.mjs, so there is nothing to
+      # rewrite here. The registry rejects a version it already holds, which
+      # makes a re-run of an already-published release safe rather than
+      # silently duplicating an entry.
+      - name: Publish
+        run: ./mcp-publisher publish
+
+      - name: Summary
+        run: |
+          {
+            echo "### Published to the MCP Registry"
+            echo
+            echo '```'
+            echo "$(node -p "require('./server.json').name")@$(node -p "require('./server.json').version")"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

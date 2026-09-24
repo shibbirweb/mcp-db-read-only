@@ -1,0 +1,62 @@
+name: Sync Docker Hub description
+
+# The Docker Hub page is documentation, so it tracks the docs rather than the
+# release cycle. Keeping this out of docker-publish.yml means a wording change
+# reaches Docker Hub without republishing an image, and a description failure
+# can never mark an otherwise successful release as broken.
+#
+# Publishes README.dockerhub.md, not README.md: Docker Hub renders neither
+# mermaid nor relative links, so the main README would arrive with its diagrams
+# as raw source and its links pointing nowhere.
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "README.dockerhub.md"
+      - ".github/workflows/dockerhub-description.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dockerhub-description
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    name: Push README.dockerhub.md to Docker Hub
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fail early if Docker Hub credentials are missing
+        run: |
+          if [ -z "${{ secrets.DOCKERHUB_USERNAME }}" ] || [ -z "${{ secrets.DOCKERHUB_TOKEN }}" ]; then
+            echo "::error::Set the DOCKERHUB_USERNAME and DOCKERHUB_TOKEN repository secrets"
+            exit 1
+          fi
+
+      # Editing the description needs a wider token than pushing an image does:
+      # Read, Write, Delete, plus Admin on the repository if it belongs to an
+      # organisation. A push-only token fails here with "Forbidden".
+      - name: Sync the description
+        uses: peter-evans/dockerhub-description@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: shibbirweb/mcp-db-read-only
+          readme-filepath: ./README.dockerhub.md
+          short-description: "Read-only MCP server for SQL, MongoDB, Redis and Elasticsearch, with runtime-switchable connections"
+
+      - name: Summary
+        run: |
+          {
+            echo "### Docker Hub description updated"
+            echo
+            echo "Source: \`README.dockerhub.md\` at ${GITHUB_SHA::7}"
+            echo
+            echo "<https://hub.docker.com/r/shibbirweb/mcp-db-read-only>"
+          } >> "$GITHUB_STEP_SUMMARY"

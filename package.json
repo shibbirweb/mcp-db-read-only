@@ -1,0 +1,76 @@
+{
+  "name": "@shibbirweb/mcp-db-read-only",
+  "version": "0.1.0",
+  "description": "A read-only MCP server for MySQL, MariaDB, PostgreSQL, SQLite, SQL Server, ClickHouse, MongoDB, Redis and Elasticsearch, with connections switchable at runtime.",
+  "license": "MIT",
+  "author": "Md. Shibbir Ahmed <shibbirweb@gmail.com>",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "mcp-db-read-only": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "mcpName": "io.github.shibbirweb/mcp-db-read-only",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shibbirweb/mcp-db-read-only.git"
+  },
+  "bugs": {
+    "url": "https://github.com/shibbirweb/mcp-db-read-only/issues"
+  },
+  "homepage": "https://github.com/shibbirweb/mcp-db-read-only#readme",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "read-only",
+    "database",
+    "mysql",
+    "mariadb",
+    "postgresql",
+    "sqlite",
+    "sql-server",
+    "clickhouse",
+    "mongodb",
+    "redis",
+    "elasticsearch",
+    "opensearch",
+    "claude",
+    "llm"
+  ],
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "build": "tsc",
+    "prepack": "npm run build",
+    "version": "node scripts/sync-version.mjs && git add README.dockerhub.md server.json",
+    "sync-version": "node scripts/sync-version.mjs",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "test": "npm run build && node --test",
+    "test:unit": "npm run build && node --test \"test/unit/**/*.test.js\"",
+    "test:integration": "npm run build && node --test test/integration/*.test.js"
+  },
+  "dependencies": {
+    "@clickhouse/client": "~1.23.1",
+    "@modelcontextprotocol/sdk": "~1.30.0",
+    "ioredis": "~6.0.0",
+    "mongodb": "~7.6.0",
+    "mssql": "~12.7.2",
+    "mysql2": "~3.24.4",
+    "pg": "~8.23.0",
+    "zod": "~3.25.0"
+  },
+  "devDependencies": {
+    "@types/mssql": "~12.3.0",
+    "@types/node": "~22.20.0",
+    "@types/pg": "~8.23.1",
+    "typescript": "~5.7.2"
+  }
+}

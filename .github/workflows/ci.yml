@@ -1,0 +1,371 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
+  workflow_dispatch:
+  # Called by the publish workflows, so a release is verified by exactly the
+  # same jobs as a pull request, against the ref being released.
+  workflow_call:
+    inputs:
+      ref:
+        description: "Ref to check out. Defaults to the triggering ref."
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test (${{ matrix.mysql }})
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # MySQL's current LTS, and MariaDB, which shares the driver but names
+        # its statement timeout differently. Both must pass. Every other
+        # engine runs once, in each leg.
+        mysql: ["mysql:8.4", "mariadb:11.4"]
+
+    services:
+      mysql:
+        image: ${{ matrix.mysql }}
+        env:
+          MYSQL_ROOT_PASSWORD: test_root_pw
+          MARIADB_ROOT_PASSWORD: test_root_pw
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -ptest_root_pw --silent || mariadb-admin ping -h 127.0.0.1 -uroot -ptest_root_pw --silent"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=30
+
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: test_root_pw
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=30
+
+      mssql:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: "Y"
+          MSSQL_SA_PASSWORD: Test_root_pw1
+        ports:
+          - 1433:1433
+        options: >-
+          --health-cmd="/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P Test_root_pw1 -C -Q 'SELECT 1'"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=30
+
+      clickhouse:
+        image: clickhouse/clickhouse-server:24.8
+        env:
+          CLICKHOUSE_PASSWORD: test_root_pw
+        ports:
+          - 8123:8123
+        options: >-
+          --health-cmd="wget -q --spider http://127.0.0.1:8123/ping"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=30
+
+      mongodb:
+        image: mongo:7
+        env:
+          MONGO_INITDB_ROOT_USERNAME: root
+          MONGO_INITDB_ROOT_PASSWORD: test_root_pw
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd="mongosh --quiet -u root -p test_root_pw --eval 'db.adminCommand(\"ping\")'"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=30
+
+      # Service containers take no command arguments, so this Redis has no
+      # password; TEST_REDIS_URL below says so.
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=30
+
+      elasticsearch:
+        image: elasticsearch:8.15.3
+        env:
+          discovery.type: single-node
+          xpack.security.enabled: "false"
+          ES_JAVA_OPTS: -Xms512m -Xmx512m
+        ports:
+          - 9200:9200
+        options: >-
+          --health-cmd="curl -fs http://127.0.0.1:9200/_cluster/health?wait_for_status=yellow"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=30
+
+    env:
+      TEST_MYSQL_URL: mysql://root:test_root_pw@127.0.0.1:3306
+      TEST_POSTGRES_URL: postgres://postgres:test_root_pw@127.0.0.1:5432
+      TEST_MSSQL_URL: mssql://sa:Test_root_pw1@127.0.0.1:1433
+      TEST_CLICKHOUSE_URL: clickhouse://default:test_root_pw@127.0.0.1:8123
+      TEST_MONGODB_URL: mongodb://root:test_root_pw@127.0.0.1:27017
+      TEST_REDIS_URL: redis://127.0.0.1:6379
+      TEST_ELASTICSEARCH_URL: elasticsearch://127.0.0.1:9200
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+      # Every integration suite skips itself when its engine is unreachable,
+      # which would let a broken service container pass as a green build. The
+      # suites say "not reachable" when they skip, so that phrase anywhere in
+      # the output fails the job.
+      - name: Test, and assert no integration suite was skipped
+        run: |
+          set -o pipefail
+          node --test 2>&1 | tee /tmp/test-output.txt
+          if grep -q "not reachable" /tmp/test-output.txt; then
+            grep "not reachable" /tmp/test-output.txt | sed 's/^/::error::/'
+            exit 1
+          fi
+
+  docker:
+    name: Docker image
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      # Builds the release image for both target platforms without pushing, so
+      # a Dockerfile change that only breaks arm64 is caught on the PR rather
+      # than at release time.
+      - name: Build release image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: runtime
+          platforms: linux/amd64,linux/arm64
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build test image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: test
+          load: true
+          tags: mcp-db-read-only:test
+          cache-from: type=gha
+
+      # The glob is expanded inside the container, not on the runner, so it
+      # resolves against the image's own layout. The SQLite and handshake
+      # integration suites need no server, so they run here too.
+      - name: Run unit tests and serverless integration tests inside the image
+        run: docker run --rm mcp-db-read-only:test sh -c 'node --test "test/unit/**/*.test.js" test/integration/handshake.test.js test/integration/sqlite.test.js'
+
+      # The server holds drivers open and exits only on a signal, so it will
+      # not close stdout by itself. timeout ends it once the replies are in.
+      - name: Smoke test the MCP handshake
+        run: |
+          set -euo pipefail
+          output=$(printf '%s\n' \
+            '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"ci","version":"1"}}}' \
+            '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
+            '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}' \
+            | timeout 30 docker run -i --rm mcp-db-read-only:test node dist/index.js || true)
+          echo "$output"
+          echo "$output" | grep -q '"name":"run_query"'
+          echo "$output" | grep -q '"name":"find_documents"'
+          echo "$output" | grep -q '"name":"redis_command"'
+
+  npm-package:
+    name: npm package
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      # README.dockerhub.md and server.json both carry the version as data and
+      # cannot read package.json, so they are what a bump can leave behind.
+      - name: Assert the version is in sync everywhere
+        run: node scripts/sync-version.mjs --check
+
+      # The MCP registry verifies ownership by matching server.json against the
+      # published artifacts. A rename on either side is rejected at publish
+      # time, which is after the npm version is already immutable.
+      - name: Assert server.json agrees with package.json
+        run: |
+          node -e '
+            const pkg = require("./package.json");
+            const server = require("./server.json");
+            const npmEntry = server.packages.find((entry) => entry.registryType === "npm");
+            const ociEntry = server.packages.find((entry) => entry.registryType === "oci");
+            const problems = [];
+            if (server.name !== pkg.mcpName) {
+              problems.push(`server.json name ${server.name} != package.json mcpName ${pkg.mcpName}`);
+            }
+            if (!npmEntry || npmEntry.identifier !== pkg.name) {
+              problems.push(`server.json npm identifier ${npmEntry && npmEntry.identifier} != package.json name ${pkg.name}`);
+            }
+            if (!ociEntry) {
+              problems.push("server.json has no oci package entry");
+            }
+            if (server.description.length > 100) {
+              problems.push(`server.json description is ${server.description.length} characters; the registry allows 100`);
+            }
+            if (problems.length > 0) {
+              console.error("::error::" + problems.join("; "));
+              process.exit(1);
+            }
+            console.log(`server.json agrees with package.json (${server.name})`);
+          '
+
+      # Everything below runs against the tarball rather than the working tree,
+      # because that is the only artifact npm users ever receive. dist/ is
+      # gitignored, so prepack is what puts it in there.
+      - name: Pack the tarball
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/pkg
+          npm pack --pack-destination /tmp/pkg
+          ls -l /tmp/pkg
+
+      # A stray files entry that shipped src/ or test/, or one that dropped
+      # dist/, is invisible in review and permanent once published. The SQLite
+      # worker is checked by name because it is loaded by path at runtime,
+      # never imported, so nothing else would notice it missing.
+      - name: Assert the tarball ships dist and nothing else
+        run: |
+          set -euo pipefail
+          npm pack --dry-run --json > /tmp/pack.json
+          node -e '
+            const packed = JSON.parse(require("fs").readFileSync("/tmp/pack.json", "utf8"));
+            const files = packed[0].files.map((file) => file.path);
+            console.log(files.join("\n"));
+            const leaked = files.filter((path) => /^(src|test|docs)\//.test(path));
+            if (leaked.length > 0) {
+              console.error("::error::Tarball contains files it should not ship: " + leaked.join(", "));
+              process.exit(1);
+            }
+            for (const required of ["dist/index.js", "dist/drivers/sql/SqliteWorker.js"]) {
+              if (!files.includes(required)) {
+                console.error("::error::Tarball is missing " + required);
+                process.exit(1);
+              }
+            }
+          '
+
+      - name: Install the tarball into a clean project
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/consumer
+          cd /tmp/consumer
+          npm init -y > /dev/null
+          npm install /tmp/pkg/*.tgz
+
+      # npx resolves through the bin link, so a missing shebang or a lost
+      # executable bit breaks every npm user while the Docker path stays green.
+      - name: Assert the bin is linked, executable and has a shebang
+        run: |
+          set -euo pipefail
+          bin=/tmp/consumer/node_modules/.bin/mcp-db-read-only
+          test -x "$bin"
+          target=$(readlink -f "$bin")
+          echo "$bin -> $target"
+          head -1 "$target" | grep -qx '#!/usr/bin/env node'
+
+      # Same handshake as the Docker smoke test, through the installed binary.
+      # It also pins two things the unit tests cannot see: the annotations the
+      # clients read, and the version reported over the wire.
+      - name: Smoke test the MCP handshake through the installed bin
+        run: |
+          set -euo pipefail
+          cd /tmp/consumer
+          output=$(printf '%s\n' \
+            '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"ci","version":"1"}}}' \
+            '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
+            '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}' \
+            | timeout 30 ./node_modules/.bin/mcp-db-read-only || true)
+          echo "$output"
+          echo "$output" | grep -q '"name":"run_query"'
+          echo "$output" | grep -q '"readOnlyHint":true'
+          version=$(node -p "require('/tmp/consumer/node_modules/@shibbirweb/mcp-db-read-only/package.json').version")
+          echo "$output" | grep -q "\"version\":\"$version\""
+
+          # Every tool states all four hints and a title. A partial set is what
+          # directories and auditors flag, because an omitted hint cannot be
+          # told apart from one nobody considered, and a tool without a title
+          # is shown to users by its snake_case name.
+          echo "$output" > /tmp/tools.jsonl
+          node -e '
+            const lines = require("fs").readFileSync("/tmp/tools.jsonl", "utf8").trim().split("\n");
+            const listing = lines.map((line) => JSON.parse(line)).find((message) => message.id === 2);
+            const required = ["readOnlyHint", "destructiveHint", "idempotentHint", "openWorldHint"];
+            const incomplete = listing.result.tools.filter(
+              (tool) => required.some((hint) => typeof (tool.annotations || {})[hint] !== "boolean")
+            );
+            if (incomplete.length > 0) {
+              console.error("::error::Tools missing explicit hints: " + incomplete.map((t) => t.name).join(", "));
+              process.exit(1);
+            }
+            const untitled = listing.result.tools.filter(
+              (tool) => !(tool.annotations || {}).title || !tool.title
+            );
+            if (untitled.length > 0) {
+              console.error("::error::Tools missing a title: " + untitled.map((t) => t.name).join(", "));
+              process.exit(1);
+            }
+            console.log(`all ${listing.result.tools.length} tools declare a title and all four hints`);
+          '

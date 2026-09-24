@@ -1,0 +1,159 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.shibbirweb/mcp-db-read-only",
+  "title": "Databases (read-only, switchable)",
+  "description": "Read-only SQL, MongoDB, Redis and Elasticsearch access, switchable mid-conversation.",
+  "version": "0.1.0",
+  "websiteUrl": "https://github.com/shibbirweb/mcp-db-read-only#readme",
+  "repository": {
+    "url": "https://github.com/shibbirweb/mcp-db-read-only",
+    "source": "github"
+  },
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "@shibbirweb/mcp-db-read-only",
+      "version": "0.1.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "DB_URL",
+          "description": "Connection URL to open at startup, e.g. postgres://user@host:5432/db, mongodb://user@host/db, redis://host:6379/0 or sqlite:///data/app.db",
+          "isRequired": false,
+          "format": "string"
+        },
+        {
+          "name": "DB_PASSWORD",
+          "description": "Password for DB_URL, so it need not be percent-encoded inside the URL",
+          "isRequired": false,
+          "isSecret": true,
+          "format": "string"
+        },
+        {
+          "name": "DB_PROFILES",
+          "description": "JSON object of named connections to switch between, each a URL or {\"url\", \"password\"}",
+          "isRequired": false,
+          "isSecret": true,
+          "format": "string"
+        },
+        {
+          "name": "DB_DEFAULT_PROFILE",
+          "description": "Which DB_PROFILES entry to start on",
+          "isRequired": false,
+          "format": "string"
+        },
+        {
+          "name": "DB_CONNECT_TIMEOUT_MS",
+          "description": "Connection timeout in milliseconds. Defaults to 10000",
+          "isRequired": false,
+          "format": "number"
+        },
+        {
+          "name": "DB_QUERY_TIMEOUT_MS",
+          "description": "Server-side query timeout in milliseconds. Defaults to 30000",
+          "isRequired": false,
+          "format": "number"
+        },
+        {
+          "name": "MYSQL_HOST",
+          "description": "Legacy MySQL-only form, kept for drop-in compatibility. Prefer DB_URL",
+          "isRequired": false,
+          "format": "string"
+        },
+        {
+          "name": "MYSQL_USER",
+          "description": "Legacy MySQL-only form. Prefer DB_URL",
+          "isRequired": false,
+          "format": "string"
+        },
+        {
+          "name": "MYSQL_PASSWORD",
+          "description": "Legacy MySQL-only form. Prefer DB_URL with DB_PASSWORD",
+          "isRequired": false,
+          "isSecret": true,
+          "format": "string"
+        },
+        {
+          "name": "MYSQL_DATABASE",
+          "description": "Legacy MySQL-only form. Prefer DB_URL",
+          "isRequired": false,
+          "format": "string"
+        }
+      ]
+    },
+    {
+      "registryType": "oci",
+      "identifier": "docker.io/shibbirweb/mcp-db-read-only:0.1.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "DB_URL",
+          "description": "Connection URL to open at startup, e.g. postgres://user@host:5432/db, mongodb://user@host/db, redis://host:6379/0 or sqlite:///data/app.db. Use host.docker.internal to reach the host",
+          "isRequired": false,
+          "format": "string"
+        },
+        {
+          "name": "DB_PASSWORD",
+          "description": "Password for DB_URL, so it need not be percent-encoded inside the URL",
+          "isRequired": false,
+          "isSecret": true,
+          "format": "string"
+        },
+        {
+          "name": "DB_PROFILES",
+          "description": "JSON object of named connections to switch between, each a URL or {\"url\", \"password\"}",
+          "isRequired": false,
+          "isSecret": true,
+          "format": "string"
+        },
+        {
+          "name": "DB_DEFAULT_PROFILE",
+          "description": "Which DB_PROFILES entry to start on",
+          "isRequired": false,
+          "format": "string"
+        },
+        {
+          "name": "DB_CONNECT_TIMEOUT_MS",
+          "description": "Connection timeout in milliseconds. Defaults to 10000",
+          "isRequired": false,
+          "format": "number"
+        },
+        {
+          "name": "DB_QUERY_TIMEOUT_MS",
+          "description": "Server-side query timeout in milliseconds. Defaults to 30000",
+          "isRequired": false,
+          "format": "number"
+        },
+        {
+          "name": "MYSQL_HOST",
+          "description": "Legacy MySQL-only form, kept for drop-in compatibility. Prefer DB_URL",
+          "isRequired": false,
+          "format": "string"
+        },
+        {
+          "name": "MYSQL_USER",
+          "description": "Legacy MySQL-only form. Prefer DB_URL",
+          "isRequired": false,
+          "format": "string"
+        },
+        {
+          "name": "MYSQL_PASSWORD",
+          "description": "Legacy MySQL-only form. Prefer DB_URL with DB_PASSWORD",
+          "isRequired": false,
+          "isSecret": true,
+          "format": "string"
+        },
+        {
+          "name": "MYSQL_DATABASE",
+          "description": "Legacy MySQL-only form. Prefer DB_URL",
+          "isRequired": false,
+          "format": "string"
+        }
+      ]
+    }
+  ]
+}

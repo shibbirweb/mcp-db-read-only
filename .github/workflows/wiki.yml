@@ -1,0 +1,71 @@
+name: Publish Wiki
+
+# The wiki is a second git repository (<repo>.wiki.git) that GitHub does not
+# keep in sync with this one. This mirrors docs/wiki/ into it on every merge to
+# master, so the wiki is reviewed through pull requests like the rest of the
+# code instead of being edited in the browser.
+#
+# One-time setup: the wiki repository does not exist until the first page is
+# created. Open the repository's Wiki tab, create any page, save it, then this
+# workflow can push. Without that, the clone step fails with "repository not
+# found".
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "docs/wiki/**"
+      - ".github/workflows/wiki.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: wiki
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Mirror docs/wiki to the GitHub wiki
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Clone the wiki repository
+        env:
+          # A fine-grained PAT in WIKI_TOKEN is the fallback for organisations
+          # where GITHUB_TOKEN is not permitted to write the wiki.
+          WIKI_TOKEN: ${{ secrets.WIKI_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if ! git clone "https://x-access-token:${WIKI_TOKEN}@github.com/${GITHUB_REPOSITORY}.wiki.git" wiki; then
+            echo "::error::Could not clone the wiki. Create the first wiki page in the GitHub UI once, then rerun."
+            exit 1
+          fi
+
+      - name: Copy pages across
+        run: |
+          set -euo pipefail
+          # Wipe tracked pages first so a file deleted from docs/wiki also
+          # disappears from the wiki, then copy the current set in.
+          find wiki -maxdepth 1 -name '*.md' -delete
+          cp docs/wiki/*.md wiki/
+          ls -1 wiki/*.md
+
+      - name: Commit and push
+        run: |
+          set -euo pipefail
+          cd wiki
+          git config user.name "Md. Shibbir Ahmed"
+          git config user.email "shibbirweb@gmail.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Wiki already up to date, nothing to push."
+            exit 0
+          fi
+          git commit -m "docs: sync wiki from ${GITHUB_SHA::7}"
+          git push
+          echo "Wiki updated from ${GITHUB_SHA::7}" >> "$GITHUB_STEP_SUMMARY"

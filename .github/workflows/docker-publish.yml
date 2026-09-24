@@ -1,0 +1,123 @@
+name: Publish to Docker Hub
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to publish (e.g. v1.0.0). Defaults to the current ref."
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  IMAGE_NAME: shibbirweb/mcp-db-read-only
+
+jobs:
+  # Publishing something that was never tested is how a broken release
+  # reaches users. This is the full CI workflow, every engine included, run
+  # against the exact ref being published; nothing below starts unless it is
+  # green.
+  verify:
+    name: Verify before publishing
+    uses: ./.github/workflows/ci.yml
+    with:
+      ref: ${{ inputs.tag || github.ref }}
+
+  # A release tagged v1.2.3 whose package.json still says 1.0.0 produces an
+  # image whose reported version lies. Catch that before it ships.
+  check-tag:
+    name: Check the tag matches package.json
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Compare
+        if: github.event_name == 'release'
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME#v}"
+          pkg=$(node -p "require('./package.json').version")
+          echo "tag=$tag package.json=$pkg"
+          if [ "$tag" != "$pkg" ]; then
+            echo "::error::Release tag $GITHUB_REF_NAME does not match package.json version $pkg"
+            exit 1
+          fi
+
+  publish:
+    name: Build and push
+    needs: [verify, check-tag]
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Fail early if Docker Hub credentials are missing
+        run: |
+          if [ -z "${{ secrets.DOCKERHUB_USERNAME }}" ] || [ -z "${{ secrets.DOCKERHUB_TOKEN }}" ]; then
+            echo "::error::Set the DOCKERHUB_USERNAME and DOCKERHUB_TOKEN repository secrets"
+            exit 1
+          fi
+
+      # QEMU lets the amd64 runner produce the arm64 layers, so Apple Silicon
+      # users get a native image instead of a slow emulated one.
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Compute tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_NAME }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=raw,value=latest,enable=${{ github.event_name == 'release' && github.event.release.prerelease == false }}
+          labels: |
+            org.opencontainers.image.title=mcp-db-read-only
+            org.opencontainers.image.description=Read-only MCP server for SQL, MongoDB, Redis and Elasticsearch, with runtime-switchable connections
+            org.opencontainers.image.licenses=MIT
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: runtime
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # The Docker Hub description is NOT synced here. It lives in
+      # dockerhub-description.yml, which runs on master pushes that touch
+      # README.dockerhub.md. Keeping it out means a wording change does not
+      # need a release, and a description failure cannot redden a release that
+      # actually published fine.
+
+      - name: Summary
+        run: |
+          {
+            echo "### Published"
+            echo
+            echo '```'
+            echo "${{ steps.meta.outputs.tags }}"
+            echo '```'
+            echo
+            echo "Platforms: linux/amd64, linux/arm64"
+          } >> "$GITHUB_STEP_SUMMARY"
