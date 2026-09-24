@@ -127,3 +127,13 @@ This also mostly dissolves the one-port-many-copies problem: whichever copy owns
 The live stream only announces new entries; the page decides what to do. On page 1 it reloads that page, keeping open cards open. On any other page it shows a "new entries" button rather than shifting what the reader is looking at.
 
 A unit test checks that every function the page script calls is defined in it. The script has no build step and the tests run no browser, and a refactor once removed a helper the live update depended on; the page failed silently until this check existed.
+
+## The standalone viewer
+
+`mcp-db-read-only viewer --dir <folder> [--port 4800] [--host 0.0.0.0]` (`src/cli/ViewerCommand.ts`) runs `LiveLogViewer` over a `FolderLogStore` and nothing else: no MCP server, no drivers, no credentials. `index.ts` loads it only for the `viewer` argument, so the MCP server's startup pays nothing for it.
+
+It is the recommended way to watch the log. The copies of the server an MCP client starts then only write files, and none of them binds a port, so the question of which copy owns the viewer disappears. Its behaviour differs from the in-server viewer where a person is watching:
+
+- It binds at once, and a taken port is a non-zero exit with the holder named, not a note in a chat.
+- It holds its process open (`holdProcessOpen`), where the in-server viewer never keeps an MCP server alive.
+- The folder is created if missing, owner-only, so it can be started before anything has been logged.

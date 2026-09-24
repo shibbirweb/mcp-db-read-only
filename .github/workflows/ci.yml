@@ -326,6 +326,13 @@ jobs:
           echo "$bin -> $target"
           head -1 "$target" | grep -qx '#!/usr/bin/env node'
 
+      # The viewer subcommand ships in the same bin; its help must work from
+      # the installed package, not just the checkout.
+      - name: Assert the viewer command runs from the installed bin
+        run: |
+          set -euo pipefail
+          /tmp/consumer/node_modules/.bin/mcp-db-read-only viewer --help | grep -q "Usage: mcp-db-read-only viewer"
+
       # Same handshake as the Docker smoke test, through the installed binary.
       # It also pins two things the unit tests cannot see: the annotations the
       # clients read, and the version reported over the wire.

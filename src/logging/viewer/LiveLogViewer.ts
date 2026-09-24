@@ -123,6 +123,15 @@ export class LiveLogViewer implements BackgroundService {
     return this.binding;
   }
 
+  /**
+   * Keep the process alive for as long as the viewer listens. Only the
+   * standalone `viewer` command wants this; inside an MCP server the viewer
+   * must never be what keeps the process running.
+   */
+  public holdProcessOpen(): void {
+    this.server?.ref();
+  }
+
   /** Never throws: shutdown calls it. */
   public async stop(): Promise<void> {
     this.stopped = true;

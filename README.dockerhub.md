@@ -328,7 +328,7 @@ In Docker, a log file or folder must be on a mounted volume to outlive the conta
 
 ### Live viewer in the browser
 
-Add `DB_LOG_PORT` to watch calls arrive in a browser page, updating the moment each one finishes:
+Add `DB_LOG_PORT` to watch calls arrive in a browser page, updating the moment each one finishes. (Or run the viewer separately; see below.)
 
 ```bash
 DB_LOG=true DB_LOG_PORT=4800 npx -y @shibbirweb/mcp-db-read-only
@@ -351,6 +351,32 @@ With no `DB_LOG_PORT`, nothing listens on any port.
 The viewer takes its port on the **first tool call**, not at startup. MCP clients such as Claude Desktop start one copy of the server per chat surface, and most copies are never used; binding lazily means the copy your chat is using gets the port, and idle copies hold none (they open no database connections either until used).
 
 If the port is taken when a call arrives (another chat is already using the viewer, say), the call still works, and its result carries one extra line saying which process holds the port: free it, or set `DB_LOG_PORT` to another one. Every later call retries, so once the port is free the viewer comes up on the next call and says so. `current_connection` always shows the viewer's state.
+
+### Viewer in a separate terminal (recommended)
+
+The viewer can also run on its own, reading the log folder, with no MCP server, no database and no credentials. This keeps the servers your MCP client starts as light as possible (they only write files, and never compete for a port), and one viewer shows the calls of every copy writing to the folder:
+
+```bash
+# in your MCP client config: log to a folder, no port
+DB_LOG_DIR=~/Library/Logs/mcp-db-read-only
+
+# in a terminal, whenever you want to watch
+npx -y @shibbirweb/mcp-db-read-only viewer --dir ~/Library/Logs/mcp-db-read-only --port 4800
+# then open http://127.0.0.1:4800/
+```
+
+| Flag | Default | Meaning |
+| --- | --- | --- |
+| `--dir`, `-d` | `DB_LOG_DIR` | The log folder (required) |
+| `--port`, `-p` | `4800` | Port to listen on |
+| `--host` | `0.0.0.0` | Address to listen on |
+
+It starts at once and exits with an error if the port is taken, naming the process that holds it. Ctrl+C stops it. With Docker, mount the folder and publish the port:
+
+```bash
+docker run --rm -p 127.0.0.1:4800:4800 -v ~/Library/Logs/mcp-db-read-only:/logs:ro \
+  shibbirweb/mcp-db-read-only node dist/index.js viewer --dir /logs --port 4800
+```
 
 In Docker, publish the port as well: `-p 4800:4800 -e DB_LOG=true -e DB_LOG_PORT=4800`. Publishing it as `-p 127.0.0.1:4800:4800` keeps it reachable from this machine only.
 
