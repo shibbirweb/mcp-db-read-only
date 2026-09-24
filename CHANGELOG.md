@@ -6,6 +6,10 @@ Each release is published to npm and Docker Hub from the same tag. Where a versi
 
 ## [Unreleased]
 
+## [1.0.0]
+
+First stable release. Not yet published to npm, Docker Hub or the MCP Registry.
+
 ### Added
 
 - `mcp-db-read-only viewer --dir <folder> --port <port>`: the live log viewer as its own process, reading a `DB_LOG_DIR` folder, with no MCP server or database. Run it in a terminal so the servers an MCP client starts only write logs and never hold a port. It exits with a clear error when the port is taken.

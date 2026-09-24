@@ -1,6 +1,6 @@
 {
   "name": "@shibbirweb/mcp-db-read-only",
-  "version": "0.2.0",
+  "version": "1.0.0",
   "description": "A read-only MCP server for MySQL, MariaDB, PostgreSQL, SQLite, SQL Server, ClickHouse, MongoDB, Redis and Elasticsearch, with connections switchable at runtime.",
   "license": "MIT",
   "author": "Md. Shibbir Ahmed <shibbirweb@gmail.com>",
