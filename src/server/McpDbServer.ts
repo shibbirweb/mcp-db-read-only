@@ -2,6 +2,8 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { BaseTool } from "../tools/BaseTool.js";
 import { DriverCache } from "../drivers/DriverCache.js";
+import type { ToolCallObserver } from "../logging/ToolCallObserver.js";
+import type { BackgroundService } from "./BackgroundService.js";
 
 /**
  * Owns the MCP server's lifetime.
@@ -23,22 +25,35 @@ export class McpDbServer {
     private readonly tools: BaseTool<never>[],
     private readonly drivers: DriverCache,
     private readonly logger: (message: string) => void,
+    private readonly observer: ToolCallObserver,
+    private readonly services: BackgroundService[],
     version: string,
     name = "db-readonly-switchable"
   ) {
     this.server = new McpServer({ name, version });
   }
 
+  /** The MCP client's name from its handshake, e.g. "claude-ai", or null before one. */
+  public clientName(): string | null {
+    return this.server.server.getClientVersion()?.name ?? null;
+  }
+
   public async start(): Promise<void> {
     // Registered before the transport connects, so a tools/list arriving
     // immediately after the handshake can be answered.
     for (const tool of this.tools) {
-      tool.register(this.server);
+      tool.register(this.server, this.observer);
     }
 
     this.installSignalHandlers();
 
     await this.server.connect(new StdioServerTransport());
+
+    // After the transport, so a slow or failing helper cannot delay the
+    // handshake. Each one reports its own problems and never rejects.
+    for (const service of this.services) {
+      await service.start().catch((error: unknown) => this.logger(`background service failed to start: ${String(error)}`));
+    }
 
     // stderr, always. On stdio transport stdout carries JSON-RPC and a single
     // stray byte corrupts the stream.
@@ -73,6 +88,7 @@ export class McpDbServer {
       return;
     }
     this.shuttingDown = true;
+    await Promise.all(this.services.map((service) => service.stop().catch(() => undefined)));
     await this.drivers.closeAll();
     process.exit(0);
   }

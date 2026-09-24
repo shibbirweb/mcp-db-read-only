@@ -15,6 +15,7 @@ Every page explains not just what a class does but why it is shaped that way. Ma
 | [Read Only Enforcement](Read-Only-Enforcement) | Both layers, for every engine, and why each is shaped as it is |
 | [Tools](Tools) | The tool class hierarchy and all eighteen tools |
 | [Server Lifecycle](Server-Lifecycle) | Composition root, startup, shutdown, the stdin EOF trap |
+| [Call Logging](Call-Logging) | The optional call log: how calls and statements meet, redaction, formats |
 | [Testing](Testing) | Suite layout, the shared engine suite, running without local databases |
 | [Release Process](Release-Process) | CI, Docker Hub, npm and MCP Registry publishing, the wiki |
 

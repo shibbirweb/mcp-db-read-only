@@ -16,6 +16,19 @@ import { MySqlDriver } from "./drivers/sql/MySqlDriver.js";
 import { PostgresDriver } from "./drivers/sql/PostgresDriver.js";
 import { SqliteDriver } from "./drivers/sql/SqliteDriver.js";
 import { RowFormatter } from "./formatting/RowFormatter.js";
+import { CallLogger } from "./logging/CallLogger.js";
+import { TextLogChannel, type LogChannel } from "./logging/LogChannel.js";
+import { LiveLogViewer } from "./logging/viewer/LiveLogViewer.js";
+import { LiveViewerObserver } from "./logging/viewer/LiveViewerObserver.js";
+import { FolderLogChannel } from "./logging/store/FolderLogChannel.js";
+import { FolderLogStore } from "./logging/store/FolderLogStore.js";
+import type { LogStore } from "./logging/store/LogStore.js";
+import { MemoryLogStore } from "./logging/store/MemoryLogStore.js";
+import type { BackgroundService } from "./server/BackgroundService.js";
+import { JsonLogFormatter, PrettyLogFormatter } from "./logging/LogFormatter.js";
+import { FileSink, StderrSink } from "./logging/LogSink.js";
+import { SilentTracer, type StatementTracer } from "./logging/StatementTracer.js";
+import { SilentObserver, type ToolCallObserver } from "./logging/ToolCallObserver.js";
 import { McpDbServer } from "./server/McpDbServer.js";
 import { BaseTool } from "./tools/BaseTool.js";
 import { DescribeTableTool } from "./tools/browse/DescribeTableTool.js";
@@ -42,7 +55,7 @@ import { RedisCommandValidator } from "./validation/keyvalue/RedisCommandValidat
 import { NamePolicyRegistry } from "./validation/names/NamePolicyRegistry.js";
 import { SearchBodyValidator } from "./validation/search/SearchBodyValidator.js";
 import { SqlValidatorRegistry } from "./validation/sql/SqlValidatorRegistry.js";
-import type { ConfigurationLoader } from "./types/config.types.js";
+import type { ConfigurationLoader, LoggingSettings } from "./types/config.types.js";
 import type { DriverTuning } from "./types/connection.types.js";
 
 /**
@@ -65,6 +78,12 @@ export class ApplicationFactory {
    * total open connections at MAX_DRIVERS * CONNECTION_LIMIT.
    */
   private static readonly MAX_DRIVERS = 8;
+
+  /**
+   * Set once built, for the call log's client name: the logger has to exist
+   * before the server that will learn the name at handshake.
+   */
+  private server: McpDbServer | null = null;
 
   constructor(
     private readonly configLoader: ConfigurationLoader = new EnvironmentConfigLoader(),
@@ -95,36 +114,147 @@ export class ApplicationFactory {
       queryTimeoutMs: config.queryTimeoutMs,
     };
 
-    const cache = new DriverCache(this.createDriverRegistry(tuning), ApplicationFactory.MAX_DRIVERS);
+    const callLog = this.createCallLog(config.logging, registry);
+
+    const cache = new DriverCache(
+      this.createDriverRegistry(tuning, callLog.tracer),
+      ApplicationFactory.MAX_DRIVERS
+    );
     const connections = new ConnectionManager(registry, cache);
     const drivers = new DriverProvider(registry, cache, QUERY_TOOLS);
 
-    const tools = this.createTools(connections, drivers);
+    const tools = this.createTools(connections, drivers, callLog.viewerStatus);
 
-    return new McpDbServer(tools, cache, this.logger, this.versionLoader.load());
+    const server = new McpDbServer(tools, cache, this.logger, callLog.observer, callLog.services, this.versionLoader.load());
+    this.server = server;
+    return server;
+  }
+
+  /**
+   * The call log when DB_LOG or DB_LOG_FILE asks for it, silent stand-ins
+   * otherwise. One CallLogger plays both roles, observer for the tools and
+   * tracer for the drivers, which is what lets it nest each driver statement
+   * under the call that caused it.
+   */
+  private createCallLog(
+    settings: LoggingSettings,
+    registry: ConnectionRegistry
+  ): {
+    observer: ToolCallObserver;
+    tracer: StatementTracer;
+    services: BackgroundService[];
+    viewerStatus: () => string | null;
+  } {
+    if (!settings.enabled) {
+      return { observer: new SilentObserver(), tracer: new SilentTracer(), services: [], viewerStatus: () => null };
+    }
+
+    const channels: LogChannel[] = [];
+    const services: BackgroundService[] = [];
+    let viewer: LiveLogViewer | null = null;
+    const outputs: string[] = [];
+
+    const sink = settings.file ? new FileSink(settings.file) : new StderrSink();
+    if (settings.text) {
+      const formatter = settings.format === "json" ? new JsonLogFormatter() : new PrettyLogFormatter();
+      channels.push(new TextLogChannel(sink, formatter));
+      outputs.push(`${settings.format} text to ${sink.description}`);
+    }
+
+    // The viewer reads the folder when there is one, which also shows the
+    // calls of every other copy of the server saving there, and otherwise
+    // keeps this process's recent entries in memory.
+    let store: LogStore;
+    if (settings.directory) {
+      const folderStore = new FolderLogStore(settings.directory);
+      store = folderStore;
+      channels.push(new FolderLogChannel(settings.directory, (entry) => folderStore.noteWritten(entry)));
+      outputs.push(`one JSON file per entry in ${settings.directory}`);
+    } else {
+      const memoryStore = new MemoryLogStore(settings.viewerHistory);
+      store = memoryStore;
+      if (settings.viewerPort !== null) {
+        channels.push(memoryStore);
+      }
+    }
+
+    if (settings.viewerPort !== null) {
+      // Always all interfaces, as configured: reachable from other machines
+      // and from a Docker host without extra settings. The viewer announces
+      // that it has no access control when it starts, which is on the first
+      // tool call rather than here.
+      viewer = new LiveLogViewer("0.0.0.0", settings.viewerPort, store, this.logger);
+      services.push(viewer);
+    }
+
+    const logger = new CallLogger(
+      channels,
+      () => {
+        const target = registry.getActiveTarget();
+        return target
+          ? `${registry.getActiveName()} (${EngineCatalog.label(target.engine)}) ${target.describe()}`
+          : null;
+      },
+      this.logger,
+      () => this.clientName()
+    );
+
+    // Said once at startup, because with logging on every query and every
+    // result is being written somewhere, and the operator should know where.
+    this.logger(`call logging on: every tool call, its statements and its full output are written as ${outputs.join(" and ")}`);
+
+    const fallback = outputs.length > 0 ? outputs.join(" and ") : "nowhere else";
+    const observer = viewer ? new LiveViewerObserver(logger, viewer, fallback, this.logger) : logger;
+    return {
+      observer,
+      tracer: logger,
+      services,
+      viewerStatus: () => (viewer ? this.describeViewer(viewer) : null),
+    };
+  }
+
+  private clientName(): string | null {
+    return this.server?.clientName() ?? null;
+  }
+
+  /** One line for current_connection. */
+  private describeViewer(viewer: LiveLogViewer): string {
+    const status = viewer.status;
+    switch (status.state) {
+      case "running":
+        return `running at ${status.url}`;
+      case "unavailable":
+        return `unavailable, ${status.reason} (free it or set DB_LOG_PORT to another port)`;
+      case "idle":
+        return "starts on the first tool call";
+    }
   }
 
   /** One factory per engine. None of them does I/O; drivers connect on first use. */
-  private createDriverRegistry(tuning: DriverTuning): DriverRegistry {
+  private createDriverRegistry(tuning: DriverTuning, tracer: StatementTracer): DriverRegistry {
     return new DriverRegistry()
-      .register("mysql", (target) => new MySqlDriver(target, tuning, this.logger))
-      .register("postgres", (target) => new PostgresDriver(target, tuning))
-      .register("sqlite", (target) => new SqliteDriver(target, tuning))
-      .register("mssql", (target) => new MsSqlDriver(target, tuning))
-      .register("clickhouse", (target) => new ClickHouseDriver(target, tuning))
-      .register("mongodb", (target) => new MongoDriver(target, tuning))
-      .register("redis", (target) => new RedisDriver(target, tuning, this.logger))
-      .register("elasticsearch", (target) => new ElasticsearchDriver(target, tuning));
+      .register("mysql", (target) => new MySqlDriver(target, tuning, tracer, this.logger))
+      .register("postgres", (target) => new PostgresDriver(target, tuning, tracer))
+      .register("sqlite", (target) => new SqliteDriver(target, tuning, tracer))
+      .register("mssql", (target) => new MsSqlDriver(target, tuning, tracer))
+      .register("clickhouse", (target) => new ClickHouseDriver(target, tuning, tracer))
+      .register("mongodb", (target) => new MongoDriver(target, tuning, tracer))
+      .register("redis", (target) => new RedisDriver(target, tuning, tracer, this.logger))
+      .register("elasticsearch", (target) => new ElasticsearchDriver(target, tuning, tracer));
   }
 
-  private createTools(connections: ConnectionManager, drivers: DriverProvider): BaseTool<never>[] {
+  private createTools(
+    connections: ConnectionManager,
+    drivers: DriverProvider,
+    viewerStatus: () => string | null
+  ): BaseTool<never>[] {
     const names = new NamePolicyRegistry();
     const targetFactory = new ConnectionTargetFactory();
     const rows = new RowFormatter();
     const mongoGuard = new MongoOperatorGuard();
 
     const tools = [
-      new CurrentConnectionTool(connections),
+      new CurrentConnectionTool(connections, viewerStatus),
       new ListConnectionsTool(connections),
       new ListDatabasesTool(drivers),
       new UseDatabaseTool(connections, names),

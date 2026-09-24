@@ -2,6 +2,7 @@ import type { Pool, PoolClient, QueryConfig } from "pg";
 import type { ConnectionTarget } from "../../domain/ConnectionTarget.js";
 import { ObjectNotFoundError } from "../../errors/ObjectNotFoundError.js";
 import type { DriverTuning } from "../../types/connection.types.js";
+import type { StatementTracer } from "../../logging/StatementTracer.js";
 import type { DatabaseEntry, ObjectListing } from "../../types/driver.types.js";
 import { BaseDriver } from "../BaseDriver.js";
 import type { SqlDriver } from "../DatabaseDriver.js";
@@ -49,9 +50,10 @@ export class PostgresDriver extends BaseDriver implements SqlDriver {
 
   constructor(
     target: ConnectionTarget,
-    private readonly tuning: DriverTuning
+    private readonly tuning: DriverTuning,
+    tracer: StatementTracer
   ) {
-    super(target);
+    super(target, tracer);
     this.pool = new LazyResource(
       () => this.createPool(),
       (pool) => pool.end()
@@ -153,12 +155,10 @@ export class PostgresDriver extends BaseDriver implements SqlDriver {
     let broken: Error | undefined;
 
     try {
-      await client.query(
-        `BEGIN TRANSACTION READ ONLY; SET LOCAL statement_timeout = ${this.tuning.queryTimeoutMs}; SET LOCAL standard_conforming_strings = on`
-      );
+      const opening = `BEGIN TRANSACTION READ ONLY; SET LOCAL statement_timeout = ${this.tuning.queryTimeoutMs}; SET LOCAL standard_conforming_strings = on`;
+      await this.traced(opening, undefined, () => client.query(opening), () => "ok");
       const config: ExtendedQueryConfig = { text, values, queryMode: "extended" };
-      const result = await client.query(config);
-      return result.rows as unknown[];
+      return await this.traced(text, values, async () => (await client.query(config)).rows as unknown[]);
     } finally {
       broken = await this.rollback(client);
       // A connection whose rollback failed is in an unknown state, so it is
@@ -169,7 +169,7 @@ export class PostgresDriver extends BaseDriver implements SqlDriver {
 
   private async rollback(client: PoolClient): Promise<Error | undefined> {
     try {
-      await client.query("ROLLBACK");
+      await this.traced("ROLLBACK", undefined, () => client.query("ROLLBACK"), () => "ok");
       return undefined;
     } catch (error) {
       return error instanceof Error ? error : new Error(String(error));

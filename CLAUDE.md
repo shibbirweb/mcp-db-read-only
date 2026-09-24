@@ -42,12 +42,14 @@ These are the things the project exists to guarantee. Do not weaken them to make
 - **The SQL lexer must read a statement exactly as the server does.** Where it cannot be sure, it reports an ambiguity and the statement is refused. Never resolve an ambiguity by guessing.
 - **Credentials never reach output.** `ConnectionTarget.key()` excludes the password and secret URL options by construction, and that same string is what gets logged and displayed. `InvalidConnectionUrlError` never echoes the URL.
 - **Nothing is written to disk and nothing is sent anywhere but the configured databases.** No telemetry, no analytics, no update check. `PRIVACY.md` states this publicly, so a change here makes that document false.
+- **The call log is off by default and always redacts.** When `DB_LOG` or `DB_LOG_FILE` turns it on it records every tool call in full, but credentials go through `Redactor` first with no way to disable it, and a logging failure must never fail a call. Drivers report statements only through `StatementTracer` (their `traced` helper); a new driver must route every statement through it.
+- **No port is opened unless asked.** The live viewer listens only when `DB_LOG_PORT` is set alongside logging. It must never keep the process alive (its sockets are unref'd), never fail startup (a taken port is a warning), and never insert logged data as HTML (`textContent` only; a test checks the script).
 - **stdout carries JSON-RPC only.** Every diagnostic goes through the injected logger to stderr. One stray `console.log` corrupts the protocol. The SQLite worker process has its stdout disconnected for the same reason.
 
 ## Adding an engine
 
 1. Describe it in `EngineCatalog` (`src/domain/Engine.ts`): schemes, default port, family, whether it switches databases.
-2. Write a driver in `src/drivers/<family>/` extending `BaseDriver` and implementing the family interface from `DatabaseDriver.ts`. Import the client library dynamically inside the driver, never at module top level. Give it a server-side read-only layer, or say plainly in its doc comment why none exists.
+2. Write a driver in `src/drivers/<family>/` extending `BaseDriver` and implementing the family interface from `DatabaseDriver.ts`. Import the client library dynamically inside the driver, never at module top level, and send every statement through `this.traced(...)` so the call log sees it. Turn off any logging of the client library's own: some write to stdout. Give it a server-side read-only layer, or say plainly in its doc comment why none exists.
 3. Register it in `ApplicationFactory.createDriverRegistry`. That is the only file that names driver classes.
 4. For a SQL engine, add a dialect to `SqlDialects` and test its lexing in `SqlSkeletonizer.test.js`.
 5. Add a fixture in `test/helpers/engines/`, an entry file in `test/integration/`, a service in `ci.yml`, and a container in `scripts/test-in-docker.sh`.

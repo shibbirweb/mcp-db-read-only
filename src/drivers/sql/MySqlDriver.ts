@@ -2,6 +2,7 @@ import type { Pool } from "mysql2/promise";
 import type { ConnectionTarget } from "../../domain/ConnectionTarget.js";
 import { ObjectNotFoundError } from "../../errors/ObjectNotFoundError.js";
 import type { DriverTuning } from "../../types/connection.types.js";
+import type { StatementTracer } from "../../logging/StatementTracer.js";
 import type { DatabaseEntry, ObjectListing } from "../../types/driver.types.js";
 import { BaseDriver } from "../BaseDriver.js";
 import type { SqlDriver } from "../DatabaseDriver.js";
@@ -43,9 +44,10 @@ export class MySqlDriver extends BaseDriver implements SqlDriver {
   constructor(
     target: ConnectionTarget,
     private readonly tuning: DriverTuning,
+    tracer: StatementTracer,
     private readonly logger: (message: string) => void
   ) {
-    super(target);
+    super(target, tracer);
     this.pool = new LazyResource(
       () => this.createPool(),
       (pool) => pool.end()
@@ -105,8 +107,10 @@ export class MySqlDriver extends BaseDriver implements SqlDriver {
   /** Placeholders for values wherever the statement allows; identifiers are quoted. */
   private async run(sql: string, params?: unknown[]): Promise<unknown[]> {
     const pool = await this.pool.get();
-    const [rows] = await pool.query(sql, params);
-    return rows as unknown[];
+    return this.traced(sql, params, async () => {
+      const [rows] = await pool.query(sql, params);
+      return rows as unknown[];
+    });
   }
 
   /**
@@ -162,7 +166,7 @@ export class MySqlDriver extends BaseDriver implements SqlDriver {
       ssl: this.sslOptions(),
     });
 
-    new MySqlSessionInitializer(this.tuning.queryTimeoutMs, this.logger).attachTo(pool);
+    new MySqlSessionInitializer(this.tuning.queryTimeoutMs, this.logger, this.tracer, this.label).attachTo(pool);
     return pool;
   }
 

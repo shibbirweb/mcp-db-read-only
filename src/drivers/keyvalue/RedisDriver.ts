@@ -3,6 +3,7 @@ import type { ConnectionTarget } from "../../domain/ConnectionTarget.js";
 import { EngineCatalog } from "../../domain/Engine.js";
 import { ObjectNotFoundError } from "../../errors/ObjectNotFoundError.js";
 import type { DriverTuning } from "../../types/connection.types.js";
+import type { StatementTracer } from "../../logging/StatementTracer.js";
 import type { DatabaseEntry, ObjectListing } from "../../types/driver.types.js";
 import { BaseDriver } from "../BaseDriver.js";
 import type { KeyValueDriver } from "../DatabaseDriver.js";
@@ -35,10 +36,11 @@ export class RedisDriver extends BaseDriver implements KeyValueDriver {
   constructor(
     target: ConnectionTarget,
     private readonly tuning: DriverTuning,
+    tracer: StatementTracer,
     private readonly logger: (message: string) => void,
     private readonly guard: RedisCommandFlagsGuard = new RedisCommandFlagsGuard()
   ) {
-    super(target);
+    super(target, tracer);
     this.client = new LazyResource(
       () => this.open(),
       async (client) => {
@@ -141,9 +143,12 @@ export class RedisDriver extends BaseDriver implements KeyValueDriver {
     }
   }
 
+  /**
+   * The guard's COMMAND INFO lookups go through `call` too, so the log shows
+   * the server being asked before the command itself is sent.
+   */
   public async command(name: string, args: readonly string[]): Promise<unknown> {
-    const client = await this.client.get();
-    const call = (command: string, ...rest: string[]) => client.call(command, ...rest) as Promise<unknown>;
+    const call = (command: string, ...rest: string[]) => this.call(command, ...rest);
     const subcommand = this.isContainer(name) ? args[0]?.toUpperCase() : undefined;
 
     await this.guard.assertReadOnly(call, name, subcommand);
@@ -210,9 +215,22 @@ export class RedisDriver extends BaseDriver implements KeyValueDriver {
     return ["OBJECT", "MEMORY", "XINFO"].includes(name);
   }
 
+  /** Every command this driver sends passes through here, so every one is traced. */
   private async call(command: string, ...args: string[]): Promise<unknown> {
     const client = await this.client.get();
-    return client.call(command, ...args);
+    return this.traced([command, ...args].join(" "), undefined, () => client.call(command, ...args), RedisDriver.describeReply);
+  }
+
+  /** Arrays by length, short scalars by value, so `GET` and `DBSIZE` read naturally in the log. */
+  private static describeReply(reply: unknown): string {
+    if (Array.isArray(reply)) {
+      return `${reply.length} item${reply.length === 1 ? "" : "s"}`;
+    }
+    if (reply === null) {
+      return "nil";
+    }
+    const text = String(reply);
+    return text.length <= 40 ? text : `${text.length} characters`;
   }
 
   private databaseIndex(): number {

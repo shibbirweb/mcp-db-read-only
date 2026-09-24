@@ -271,11 +271,88 @@ Every reading tool also accepts an optional `database`, applied to that call onl
 | `DB_DEFAULT_PROFILE` | none | Which profile starts active |
 | `DB_QUERY_TIMEOUT_MS` | `30000` | Statement timeout, enforced by each server where it can be |
 | `DB_CONNECT_TIMEOUT_MS` | `10000` | Connection timeout |
+| `DB_LOG` | off | `true` logs every tool call to stderr. See [Call logging](https://github.com/shibbirweb/mcp-db-read-only#call-logging) |
+| `DB_LOG_FILE` | none | Log every tool call to this file instead |
+| `DB_LOG_DIR` | none | Save every tool call as its own JSON file in this folder, permanently |
+| `DB_LOG_FORMAT` | `pretty` | `pretty` or `json` |
+| `DB_LOG_PORT` | none | Serve a live log viewer in the browser on this port |
+| `DB_LOG_HISTORY` | `500` | Entries the viewer keeps in memory when there is no `DB_LOG_DIR` |
 | `MYSQL_*` | | The legacy MySQL-only variables, read unchanged. See above |
 
 None of these are required: with no configuration at all the server still starts, and the tools tell you to call `connect`.
 
 Starting profile: `DB_DEFAULT_PROFILE` (or `MYSQL_DEFAULT_PROFILE`) if it names a real profile, else `default`, else the first one defined.
+
+---
+
+## Call logging
+
+Off by default. Turn it on to see every tool call the assistant makes: its input, each statement the drivers sent to the database, and the full output.
+
+| Variable | Effect |
+| --- | --- |
+| `DB_LOG=true` | Log to stderr, which your MCP client keeps (Claude Code shows it in its MCP logs) |
+| `DB_LOG_FILE=/path/calls.log` | Log to that file instead, appended to, created readable by you only. Implies `DB_LOG` |
+| `DB_LOG_DIR=/path/folder` | Save every entry as its own JSON file in that folder, permanently. Implies logging on its own, without also writing text |
+| `DB_LOG_FORMAT=json` | One JSON object per line, for `jq` or a log shipper. The default is `pretty` |
+
+A pretty entry:
+
+```text
+┌─ #3 run_query · ok · 38 ms · 2026-09-25T10:14:03.221Z
+│ connection  dev (MySQL) mysql://reader@127.0.0.1:3306/app
+│ input
+│   {
+│     "query": "SELECT COUNT(*) AS n FROM members"
+│   }
+│ statements (1)
+│   1. MySQL · 12 ms · 1 row
+│      SELECT COUNT(*) AS n FROM members
+│ output
+│   [
+│     {
+│       "n": 17440
+│     }
+│   ]
+└─
+```
+
+- **Everything is logged, including the full output of every call.** Treat a log file like the data it contains.
+- **Credentials never are.** A `password` argument, the password inside a connection URL, and secret-looking URL options such as `api_key` are always written as `***`, with no way to turn that off.
+- **Statements** include the ones the server sends on its own behalf: PostgreSQL's `BEGIN READ ONLY` and `ROLLBACK`, Redis's `COMMAND INFO` checks, the catalog queries behind `describe_table`. Each shows its duration and outcome (a row count, or the error); the data itself is in the call's output. A statement sent outside any call, such as MySQL's per-connection setup, gets an entry of its own.
+- An entry is written when its call finishes, and numbered when it starts, so calls handled concurrently can appear out of numeric order.
+- With `DB_LOG_DIR`, each entry is its own file in a folder per UTC day, e.g. `2026-09-25/103014-221Z_p72440_c000012_run_query_ok.json`, holding the full record as pretty JSON: time, pid, sequence, tool and outcome are in the name, so `ls` and `grep` work without opening anything. Files and folders are readable by you only. Nothing is ever deleted or rotated; archive or remove old day folders yourself. Every copy of the server can share one folder, since names never collide.
+- Logging can never break a call. If the log cannot be written (say, the disk is full), the call still succeeds, one warning is printed, and logging stops.
+
+In Docker, a log file or folder must be on a mounted volume to outlive the container: `-v "$PWD/logs:/logs" -e DB_LOG_DIR=/logs`. `DB_LOG=true` needs no mount.
+
+### Live viewer in the browser
+
+Add `DB_LOG_PORT` to watch calls arrive in a browser page, updating the moment each one finishes:
+
+```bash
+DB_LOG=true DB_LOG_PORT=4800 npx -y @shibbirweb/mcp-db-read-only
+# then open http://127.0.0.1:4800/
+```
+
+| Variable | Default | Effect |
+| --- | --- | --- |
+| `DB_LOG_PORT` | none | Serve the live viewer on this port. Needs `DB_LOG_DIR`, `DB_LOG` or `DB_LOG_FILE` as well; alone it only prints a warning |
+| `DB_LOG_HISTORY` | `500` | Without `DB_LOG_DIR`, how many recent entries the viewer keeps in memory. `0` keeps none |
+
+The page lists calls newest first, **20 per page by default**, with page controls and a choice of 10, 20, 30 or 50 per page (remembered in your browser). Each call is a card (tool, status, duration, connection, and which client and process made it) that expands to its input, statements and output, every block with its own copy icon. Filters (text, tool, failures only) apply across everything logged, not just the page shown. Page 1 updates itself as calls arrive; on any other page a "new entries" button appears instead, so the page you are reading does not shift. It follows your system's light or dark theme and loads nothing from the internet.
+
+With `DB_LOG_DIR` the viewer reads the folder, so it shows everything ever saved there, across restarts, **including calls made by other copies of the server** sharing the folder (Claude Desktop runs several). Without it, it shows this copy's last `DB_LOG_HISTORY` calls from memory.
+
+> **The viewer has no access control and listens on every network interface (`0.0.0.0`).** Anyone who can reach the port, including other devices on the same network, can read every query and every result in the log. Use it on a network you trust, or block the port at your firewall. The server prints a reminder of this when the viewer starts.
+
+With no `DB_LOG_PORT`, nothing listens on any port.
+
+The viewer takes its port on the **first tool call**, not at startup. MCP clients such as Claude Desktop start one copy of the server per chat surface, and most copies are never used; binding lazily means the copy your chat is using gets the port, and idle copies hold none (they open no database connections either until used).
+
+If the port is taken when a call arrives (another chat is already using the viewer, say), the call still works, and its result carries one extra line saying which process holds the port: free it, or set `DB_LOG_PORT` to another one. Every later call retries, so once the port is free the viewer comes up on the next call and says so. `current_connection` always shows the viewer's state.
+
+In Docker, publish the port as well: `-p 4800:4800 -e DB_LOG=true -e DB_LOG_PORT=4800`. Publishing it as `-p 127.0.0.1:4800:4800` keeps it reachable from this machine only.
 
 ---
 
@@ -333,7 +410,7 @@ Other limits worth knowing:
 
 **Parallel tool calls.** The active connection is a single piece of process state. If a client issues several tool calls in one batch they are handled concurrently, so a `use_database` batched alongside a query is not guaranteed to land first. When a read must be pinned to a particular database, pass the per-call `database` argument instead.
 
-**Shutdown.** The server exits on `SIGINT`/`SIGTERM`, not when stdin closes. Open sockets keep the event loop alive, and stdin reaching EOF only means no further requests were buffered.
+**Shutdown.** The server exits on `SIGINT`/`SIGTERM`, not when stdin closes. The live viewer, if running, closes its port with it. Open sockets keep the event loop alive, and stdin reaching EOF only means no further requests were buffered.
 
 ---
 

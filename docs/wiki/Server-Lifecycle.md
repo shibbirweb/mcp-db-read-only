@@ -14,7 +14,7 @@
 
 No connection is opened at startup. The first tool that needs one opens it, which means a server whose database is down still starts, lists its tools, and explains the failure when asked.
 
-`McpDbServer.start()` registers every tool before connecting the transport, so a `tools/list` arriving straight after the handshake can be answered.
+`McpDbServer.start()` registers every tool before connecting the transport, so a `tools/list` arriving straight after the handshake can be answered. Background services, currently only the optional live log viewer, start after the transport, and one that fails to start reports it and is skipped.
 
 ## Why the server never exits on bad configuration
 
@@ -22,7 +22,7 @@ An MCP client cannot show the stderr of a process that exited during the handsha
 
 ## Shutdown
 
-SIGINT and SIGTERM call `shutdown()`, which is idempotent, closes every driver concurrently through `DriverCache.closeAll()`, and exits. Closing never throws, so one unreachable server cannot stall shutdown. The SQLite worker processes are killed with it, and each also exits by itself when its IPC channel closes, so even a SIGKILLed server leaves no orphan.
+SIGINT and SIGTERM call `shutdown()`, which is idempotent, stops the background services (closing the viewer's port), closes every driver concurrently through `DriverCache.closeAll()`, and exits. Closing never throws, so one unreachable server cannot stall shutdown. The SQLite worker processes are killed with it, and each also exits by itself when its IPC channel closes, so even a SIGKILLed server leaves no orphan.
 
 ## The stdin EOF trap
 

@@ -1,6 +1,7 @@
+import { resolve } from "node:path";
 import { ConnectionProfile } from "../domain/ConnectionProfile.js";
 import { ConnectionTargetFactory } from "../connections/ConnectionTargetFactory.js";
-import type { ConfigurationLoader, LoadedConfiguration } from "../types/config.types.js";
+import type { ConfigurationLoader, LoadedConfiguration, LoggingSettings } from "../types/config.types.js";
 import type {
   RawMySqlProfileDefinition,
   RawUrlProfileDefinition,
@@ -34,6 +35,7 @@ import type {
 export class EnvironmentConfigLoader implements ConfigurationLoader {
   public static readonly DEFAULT_QUERY_TIMEOUT_MS = 30000;
   public static readonly DEFAULT_CONNECT_TIMEOUT_MS = 10000;
+  public static readonly DEFAULT_VIEWER_HISTORY = 500;
 
   constructor(
     private readonly env: NodeJS.ProcessEnv = process.env,
@@ -60,8 +62,72 @@ export class EnvironmentConfigLoader implements ConfigurationLoader {
         this.env.DB_CONNECT_TIMEOUT_MS ?? this.env.MYSQL_CONNECT_TIMEOUT_MS,
         EnvironmentConfigLoader.DEFAULT_CONNECT_TIMEOUT_MS
       ),
+      logging: this.readLogging(warnings),
       warnings,
     };
+  }
+
+  /**
+   * DB_LOG=true logs text to stderr; DB_LOG_FILE=/path logs text to that
+   * file. DB_LOG_DIR=/folder saves every entry as its own JSON file there.
+   * Each of the three turns logging on by itself, and they combine.
+   * DB_LOG_FORMAT picks pretty (the default) or json for the text output.
+   *
+   * Relative paths are made absolute here, against the directory the server
+   * was started in, so the startup message names the real location.
+   */
+  private readLogging(warnings: string[]): LoggingSettings {
+    const file = this.env.DB_LOG_FILE ? resolve(this.env.DB_LOG_FILE) : null;
+    const directory = this.env.DB_LOG_DIR ? resolve(this.env.DB_LOG_DIR) : null;
+    const stderr = ["true", "1", "yes", "on"].includes((this.env.DB_LOG ?? "").toLowerCase());
+    const text = stderr || file !== null;
+    const enabled = text || directory !== null;
+
+    const requested = (this.env.DB_LOG_FORMAT ?? "").toLowerCase();
+    let format: LoggingSettings["format"] = "pretty";
+    if (requested === "json") {
+      format = "json";
+    } else if (requested && requested !== "pretty") {
+      warnings.push(`DB_LOG_FORMAT="${this.env.DB_LOG_FORMAT}" is not pretty or json, using pretty.`);
+    }
+
+    return { enabled, text, file, directory, format, ...this.readViewer(enabled, warnings) };
+  }
+
+  /**
+   * DB_LOG_PORT starts the live browser viewer, but only while logging is on:
+   * the viewer shows the call log, so without one it has nothing to show, and
+   * it says so rather than silently doing nothing.
+   */
+  private readViewer(
+    loggingEnabled: boolean,
+    warnings: string[]
+  ): Pick<LoggingSettings, "viewerPort" | "viewerHistory"> {
+    const history = this.readCount(this.env.DB_LOG_HISTORY, EnvironmentConfigLoader.DEFAULT_VIEWER_HISTORY);
+    const raw = this.env.DB_LOG_PORT;
+    if (!raw) {
+      return { viewerPort: null, viewerHistory: history };
+    }
+
+    const port = Number(raw);
+    if (!/^\d+$/.test(raw) || port < 1 || port > 65535) {
+      warnings.push(`DB_LOG_PORT="${raw}" is not a port from 1 to 65535, so the live viewer is off.`);
+      return { viewerPort: null, viewerHistory: history };
+    }
+    if (!loggingEnabled) {
+      warnings.push("DB_LOG_PORT is set but call logging is off. Set DB_LOG_DIR, DB_LOG=true or DB_LOG_FILE to use the live viewer.");
+      return { viewerPort: null, viewerHistory: history };
+    }
+    return { viewerPort: port, viewerHistory: history };
+  }
+
+  /** A non-negative integer, or the fallback. 0 is allowed and means none. */
+  private readCount(value: string | undefined, fallback: number): number {
+    if (value === undefined || value === "") {
+      return fallback;
+    }
+    const parsed = Number(value);
+    return Number.isInteger(parsed) && parsed >= 0 ? parsed : fallback;
   }
 
   /**

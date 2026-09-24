@@ -2,6 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
 import type { ZodRawShape } from "zod";
 import { ToolResponse } from "../formatting/ToolResponse.js";
+import { SilentObserver, type ToolCallObserver } from "../logging/ToolCallObserver.js";
 import type { ToolResult } from "../types/tool.types.js";
 
 /**
@@ -77,8 +78,13 @@ export abstract class BaseTool<TArgs = Record<string, unknown>> {
    * argument type from the schema it was given, which it cannot do for a
    * schema held in an abstract property. Every subclass declares its own
    * argument interface, so the type is recovered immediately below.
+   *
+   * The observer sees the call from outside `invoke`, so it receives the
+   * final result, error results included, and a tool cannot opt out of it
+   * any more than it can opt out of the error contract. When call logging is
+   * off it is a SilentObserver and adds nothing.
    */
-  public register(server: McpServer): void {
+  public register(server: McpServer, observer: ToolCallObserver = new SilentObserver()): void {
     server.registerTool(
       this.name,
       {
@@ -89,7 +95,7 @@ export abstract class BaseTool<TArgs = Record<string, unknown>> {
         inputSchema: this.inputSchema,
         annotations: this.annotations,
       },
-      (args: Record<string, unknown>) => this.invoke(args as TArgs)
+      (args: Record<string, unknown>) => observer.observe(this.name, args, () => this.invoke(args as TArgs))
     );
   }
 

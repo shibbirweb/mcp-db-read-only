@@ -21,7 +21,14 @@ export class CurrentConnectionTool extends BaseTool {
 
   public readonly inputSchema: ZodRawShape = {};
 
-  constructor(private readonly connections: ConnectionManager) {
+  /**
+   * @param viewerStatus the live log viewer's state, when it is configured,
+   *   so "where are my logs?" has an answer in the chat itself.
+   */
+  constructor(
+    private readonly connections: ConnectionManager,
+    private readonly viewerStatus: () => string | null = () => null
+  ) {
     super();
   }
 
@@ -31,8 +38,13 @@ export class CurrentConnectionTool extends BaseTool {
     // Reads the nullable accessor rather than the asserting one, so an
     // unconfigured server reports its state as ordinary output instead of an
     // error. Nothing has gone wrong; nothing has been chosen yet.
+    const viewer = this.viewerStatus();
+    const viewerLine = viewer ? [`Live log viewer: ${viewer}`] : [];
+
     if (!target) {
-      return ToolResponse.text("No active connection. Call connect or use_connection to set one.");
+      return ToolResponse.text(
+        ["No active connection. Call connect or use_connection to set one.", ...viewerLine].join("\n")
+      );
     }
 
     // Rendering through describe() is what keeps the password out of output.
@@ -41,6 +53,7 @@ export class CurrentConnectionTool extends BaseTool {
         `Active profile: ${this.connections.getActiveName()}`,
         `Engine: ${EngineCatalog.label(target.engine)}`,
         `Target: ${target.describe()}`,
+        ...viewerLine,
       ].join("\n")
     );
   }

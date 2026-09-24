@@ -2,6 +2,7 @@ import type { Document, MongoClient } from "mongodb";
 import type { ConnectionTarget } from "../../domain/ConnectionTarget.js";
 import { ObjectNotFoundError } from "../../errors/ObjectNotFoundError.js";
 import type { DriverTuning } from "../../types/connection.types.js";
+import type { StatementTracer } from "../../logging/StatementTracer.js";
 import type { CappedRows, DatabaseEntry, FindRequest, ObjectListing } from "../../types/driver.types.js";
 import { BaseDriver } from "../BaseDriver.js";
 import type { DocumentDriver } from "../DatabaseDriver.js";
@@ -41,10 +42,11 @@ export class MongoDriver extends BaseDriver implements DocumentDriver {
   constructor(
     target: ConnectionTarget,
     private readonly tuning: DriverTuning,
+    tracer: StatementTracer,
     private readonly stages: MongoStageAllowlist = new MongoStageAllowlist(),
     private readonly sampler: MongoSchemaSampler = new MongoSchemaSampler()
   ) {
-    super(target);
+    super(target, tracer);
     this.client = new LazyResource(
       () => this.open(),
       (opened) => opened.client.close()
@@ -53,7 +55,8 @@ export class MongoDriver extends BaseDriver implements DocumentDriver {
 
   public async verify(): Promise<void> {
     const { client } = await this.client.get();
-    await client.db(this.target.database || "admin").command({ ping: 1 });
+    const database = this.target.database || "admin";
+    await this.traced(`${database}.ping`, undefined, () => client.db(database).command({ ping: 1 }), () => "ok");
   }
 
   public close(): Promise<void> {
@@ -66,7 +69,12 @@ export class MongoDriver extends BaseDriver implements DocumentDriver {
    */
   public async listDatabases(): Promise<DatabaseEntry[]> {
     const { client } = await this.client.get();
-    const result = await client.db("admin").admin().listDatabases({ nameOnly: true, authorizedDatabases: true });
+    const result = await this.traced(
+      "admin.listDatabases",
+      { nameOnly: true, authorizedDatabases: true },
+      () => client.db("admin").admin().listDatabases({ nameOnly: true, authorizedDatabases: true }),
+      (answer) => `${answer.databases.length} databases`
+    );
     return result.databases.map((entry) => ({
       name: entry.name,
       system: MongoDriver.SYSTEM_DATABASES.has(entry.name),
@@ -75,9 +83,9 @@ export class MongoDriver extends BaseDriver implements DocumentDriver {
 
   public async listObjects(pattern: string | undefined, limit: number): Promise<ObjectListing> {
     const database = await this.database();
-    const collections = await database
-      .listCollections({}, { nameOnly: true, authorizedCollections: true })
-      .toArray();
+    const collections = await this.traced(`${database.databaseName}.listCollections`, undefined, () =>
+      database.listCollections({}, { nameOnly: true, authorizedCollections: true }).toArray()
+    );
     return new GlobPattern(pattern).apply(
       collections.map((entry) => entry.name).sort(),
       limit
@@ -87,15 +95,17 @@ export class MongoDriver extends BaseDriver implements DocumentDriver {
   /** The inferred shape of a sample, plus any JSON Schema validator the collection declares. */
   public async describeObject(name: string): Promise<unknown> {
     const database = await this.database();
-    const [info] = await database.listCollections({ name }).toArray();
+    const [info] = await this.traced(`${database.databaseName}.listCollections`, { name }, () =>
+      database.listCollections({ name }).toArray()
+    );
     if (!info) {
       throw new ObjectNotFoundError(this.objectNoun, name);
     }
 
-    const documents = await database
-      .collection(name)
-      .aggregate([{ $sample: { size: MongoDriver.SCHEMA_SAMPLE_SIZE } }], { maxTimeMS: this.tuning.queryTimeoutMs })
-      .toArray();
+    const sampling = [{ $sample: { size: MongoDriver.SCHEMA_SAMPLE_SIZE } }];
+    const documents = await this.traced(`${database.databaseName}.${name}.aggregate`, sampling, () =>
+      database.collection(name).aggregate(sampling, { maxTimeMS: this.tuning.queryTimeoutMs }).toArray()
+    );
 
     return {
       collection: name,
@@ -108,7 +118,7 @@ export class MongoDriver extends BaseDriver implements DocumentDriver {
   public async listIndexes(name: string): Promise<unknown> {
     await this.assertCollection(name);
     const database = await this.database();
-    return database.collection(name).indexes();
+    return this.traced(`${database.databaseName}.${name}.indexes`, undefined, () => database.collection(name).indexes());
   }
 
   public async sample(name: string, limit: number): Promise<unknown> {
@@ -126,7 +136,8 @@ export class MongoDriver extends BaseDriver implements DocumentDriver {
       skip: request.skip,
       maxTimeMS: this.tuning.queryTimeoutMs,
     });
-    return this.toJson(bson, await cursor.toArray());
+    const documents = await this.traced(`${database.databaseName}.${collection}.find`, request, () => cursor.toArray());
+    return this.toJson(bson, documents);
   }
 
   /**
@@ -150,16 +161,19 @@ export class MongoDriver extends BaseDriver implements DocumentDriver {
     });
 
     const rows: Document[] = [];
-    try {
-      for await (const document of cursor) {
-        rows.push(document);
-        if (rows.length > limit) {
-          break;
+    await this.traced(`${database.databaseName}.${collection}.aggregate`, pipeline, async () => {
+      try {
+        for await (const document of cursor) {
+          rows.push(document);
+          if (rows.length > limit) {
+            break;
+          }
         }
+      } finally {
+        await cursor.close();
       }
-    } finally {
-      await cursor.close();
-    }
+      return rows;
+    });
 
     return { rows: this.toJson(bson, rows.slice(0, limit)), truncated: rows.length > limit };
   }
@@ -167,9 +181,9 @@ export class MongoDriver extends BaseDriver implements DocumentDriver {
   public async count(collection: string, filter: Record<string, unknown>): Promise<number> {
     const { bson } = await this.client.get();
     const database = await this.database();
-    return database
-      .collection(collection)
-      .countDocuments(this.fromJson(bson, filter), { maxTimeMS: this.tuning.queryTimeoutMs });
+    return this.traced(`${database.databaseName}.${collection}.countDocuments`, filter, () =>
+      database.collection(collection).countDocuments(this.fromJson(bson, filter), { maxTimeMS: this.tuning.queryTimeoutMs })
+    );
   }
 
   public async distinct(
@@ -179,9 +193,9 @@ export class MongoDriver extends BaseDriver implements DocumentDriver {
   ): Promise<unknown[]> {
     const { bson } = await this.client.get();
     const database = await this.database();
-    const values = await database
-      .collection(collection)
-      .distinct(field, this.fromJson(bson, filter), { maxTimeMS: this.tuning.queryTimeoutMs });
+    const values = await this.traced(`${database.databaseName}.${collection}.distinct`, { field, filter }, () =>
+      database.collection(collection).distinct(field, this.fromJson(bson, filter), { maxTimeMS: this.tuning.queryTimeoutMs })
+    );
     return this.toJson(bson, values);
   }
 
@@ -192,7 +206,9 @@ export class MongoDriver extends BaseDriver implements DocumentDriver {
 
   private async assertCollection(name: string): Promise<void> {
     const database = await this.database();
-    const found = await database.listCollections({ name }, { nameOnly: true }).toArray();
+    const found = await this.traced(`${database.databaseName}.listCollections`, { name }, () =>
+      database.listCollections({ name }, { nameOnly: true }).toArray()
+    );
     if (found.length === 0) {
       throw new ObjectNotFoundError(this.objectNoun, name);
     }

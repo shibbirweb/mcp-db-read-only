@@ -15,7 +15,8 @@ export class JsonSerializer {
   /** Enough bytes to recognise a value; the length says how much was omitted. */
   private static readonly BINARY_PREVIEW_BYTES = 32;
 
-  public stringify(value: unknown): string {
+  /** @param indent 2 for reading, 0 for one-line JSON such as a log entry. */
+  public stringify(value: unknown, indent = 2): string {
     const serializer = this;
     return JSON.stringify(
       value,
@@ -25,7 +26,7 @@ export class JsonSerializer {
       function (this: Record<string, unknown>, key: string, replaced: unknown): unknown {
         return serializer.replace(this[key], replaced);
       },
-      2
+      indent || undefined
     ) ?? "null";
   }
 

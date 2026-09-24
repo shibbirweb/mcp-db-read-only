@@ -1,10 +1,10 @@
 # Privacy Policy
 
-Last updated: 24 September 2026
+Last updated: 25 September 2026
 
 This policy covers `mcp-db-read-only`, distributed as the npm package `@shibbirweb/mcp-db-read-only` and the Docker image `shibbirweb/mcp-db-read-only`.
 
-The short version: the server runs on your machine, talks to the databases you point it at, and to nothing else. It collects nothing, sends nothing anywhere, and stores nothing after it exits.
+The short version: the server runs on your machine, talks to the databases you point it at, and to nothing else. It listens on no network port unless you turn on the optional live log viewer. It collects nothing and sends nothing anywhere. It stores nothing after it exits, unless you turn on the optional call log and point it at a file, in which case it writes exactly what that log records to the file you chose.
 
 ## What the server sends, and where
 
@@ -30,7 +30,7 @@ The read-only guarantee protects your data from being *changed*. It does not sto
 
 An MCP server tells your assistant what its tools do, and the assistant acts on that text. A server can abuse this by describing one thing and doing another, or by hiding instructions in a description to steer the model toward something you did not ask for. The descriptions here are not that.
 
-Every tool's description states what the tool does and stops there. None of them contains instructions to the assistant about unrelated actions, hidden or invisible text, or any attempt to influence behaviour beyond choosing the right tool. `run_query` says it runs read-only SQL, and the validator permits only read statements. `aggregate` says `$out` and `$merge` are not allowed, and they are refused. `redis_command` says write commands are refused, and they are. `connect` says credentials are not persisted to disk, and nothing in this server writes to disk.
+Every tool's description states what the tool does and stops there. None of them contains instructions to the assistant about unrelated actions, hidden or invisible text, or any attempt to influence behaviour beyond choosing the right tool. `run_query` says it runs read-only SQL, and the validator permits only read statements. `aggregate` says `$out` and `$merge` are not allowed, and they are refused. `redis_command` says write commands are refused, and they are. `connect` says credentials are not persisted to disk, and they are not: the optional call log, the only thing that can write to disk, redacts them before writing.
 
 The declared capability hints match the enforced behaviour, and all four are stated on every tool. The fifteen reading tools declare `readOnlyHint: true` and cannot write: each engine is guarded by two independent layers, described in the README's Security section. The three connection tools declare `readOnlyHint: false` because they change which server and database the session points at, and `destructiveHint: false` because they alter nothing in any database.
 
@@ -49,13 +49,30 @@ Two things outside this server's control are worth knowing:
 
 ## Logs
 
-Diagnostics go to standard error and consist of configuration warnings, the active connection description, and connection errors reported by a driver. No passwords, no query text, no result data.
+By default, diagnostics go to standard error and consist of configuration warnings, the active connection description, and connection errors reported by a driver. No passwords, no query text, no result data.
 
 Standard error is captured by your MCP client, so where those lines end up is determined by that client.
 
+### The optional call log
+
+Off unless you set `DB_LOG=true`, `DB_LOG_FILE` or `DB_LOG_DIR`. When it is on, the server logs every tool call: its arguments, every statement it sent to a database (queries, commands, request lines and their parameters), and the **complete output returned to the assistant, including every row, document and key read**. With `DB_LOG=true` that goes to standard error; with `DB_LOG_FILE` it is appended to the file you named; with `DB_LOG_DIR` every entry is saved as its own JSON file in the folder you named. Files and folders are created readable by your user only, and the server never deletes, rotates or uploads them.
+
+Two things hold even with logging on:
+
+- **Credentials are never logged.** Password arguments, passwords inside connection URLs, and URL options that look like credentials (`api_key`, `token` and similar) are replaced with `***` before anything is written, and there is no setting to change that.
+- **The log goes only where you point it.** It is never sent anywhere by this server.
+
+A log file therefore holds the same data your assistant saw. Protect, rotate and delete it as you would that data. The server never deletes or rotates it for you.
+
+### The live viewer
+
+If you also set `DB_LOG_PORT`, the server listens on that port, on every network interface, and serves a page showing the call log live: the saved folder when `DB_LOG_DIR` is set, including calls made by other copies of the server saving there, or otherwise the recent history kept in memory. **It has no access control.** Anyone who can reach the port can read every logged query and result, and the server says so when the viewer starts. Nothing is served beyond the call log itself, the page loads nothing from any other server, and without `DB_LOG_PORT` the server listens on no port at all.
+
 ## Retention
 
-Nothing is persisted. The active connection, session profiles created with `connect`, and every open driver connection live in process memory and cease to exist when the process exits. The server keeps no database, cache, history or state file of its own. The SQLite helper process it starts exits with it.
+Nothing is persisted by default. The active connection, session profiles created with `connect`, and every open driver connection live in process memory and cease to exist when the process exits. The server keeps no database, cache, history or state file of its own. The SQLite helper process it starts exits with it.
+
+The one exception is the optional call log, if you point it at a file or folder: it is yours, it persists until you delete it, and it contains what the section above describes.
 
 ## Third parties
 

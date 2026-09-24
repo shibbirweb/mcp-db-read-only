@@ -1,6 +1,7 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { ElasticsearchDriver } from "../../../../dist/drivers/search/ElasticsearchDriver.js";
+import { SilentTracer } from "../../../../dist/logging/StatementTracer.js";
 import { engineTarget } from "../../../helpers/targets.js";
 
 const tuning = { connectionLimit: 1, connectTimeoutMs: 1000, queryTimeoutMs: 1000 };
@@ -16,7 +17,7 @@ function fakeFetch(status = 200, body = {}) {
 }
 
 const driver = (fetcher, overrides = {}) =>
-  new ElasticsearchDriver(engineTarget("elasticsearch", overrides), tuning, fetcher);
+  new ElasticsearchDriver(engineTarget("elasticsearch", overrides), tuning, new SilentTracer(), fetcher);
 
 describe("requests are limited to fixed read endpoints", () => {
   test("search is a POST to <index>/_search", async () => {

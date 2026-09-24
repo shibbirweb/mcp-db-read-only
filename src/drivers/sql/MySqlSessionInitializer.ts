@@ -1,4 +1,5 @@
 import type { Pool } from "mysql2/promise";
+import type { StatementTracer } from "../../logging/StatementTracer.js";
 
 /**
  * The connection this module actually deals with: the callback-API one.
@@ -56,9 +57,17 @@ export class MySqlSessionInitializer {
   /** MariaDB's name for the variable; MySQL rejects it with error 1193. */
   private static readonly UNKNOWN_VARIABLE = 1193;
 
+  /**
+   * @param tracer records each setup statement in the call log, when it is
+   *   on. They run on the pool's own schedule, so they usually appear as
+   *   entries of their own rather than under the call that opened the
+   *   connection.
+   */
   constructor(
     private readonly queryTimeoutMs: number,
-    private readonly logger: (message: string) => void
+    private readonly logger: (message: string) => void,
+    private readonly tracer: StatementTracer,
+    private readonly engineLabel: string
   ) {}
 
   /**
@@ -93,7 +102,10 @@ export class MySqlSessionInitializer {
    * gap affects only the timeout, never the read-only mode set above.
    */
   private applyTimeout(connection: CoreConnection): void {
-    connection.query(`SET SESSION MAX_EXECUTION_TIME = ${this.queryTimeoutMs}`, (error) => {
+    const sql = `SET SESSION MAX_EXECUTION_TIME = ${this.queryTimeoutMs}`;
+    const started = Date.now();
+    connection.query(sql, (error) => {
+      this.tracer.record(this.engineLabel, { text: sql }, Date.now() - started, error ?? undefined);
       if (!error) {
         return;
       }
@@ -119,7 +131,9 @@ export class MySqlSessionInitializer {
    * not.
    */
   private apply(connection: CoreConnection, sql: string, description: string): void {
+    const started = Date.now();
     connection.query(sql, (error: unknown) => {
+      this.tracer.record(this.engineLabel, { text: sql }, Date.now() - started, error ?? undefined);
       if (error) {
         this.logger(`could not ${description}: ${String(error)}`);
       }

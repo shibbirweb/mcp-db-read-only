@@ -3,6 +3,7 @@ import type { ConnectionTarget } from "../../domain/ConnectionTarget.js";
 import { EngineCatalog } from "../../domain/Engine.js";
 import { ObjectNotFoundError } from "../../errors/ObjectNotFoundError.js";
 import type { DriverTuning } from "../../types/connection.types.js";
+import type { StatementTracer } from "../../logging/StatementTracer.js";
 import type { DatabaseEntry, ObjectListing } from "../../types/driver.types.js";
 import { BaseDriver } from "../BaseDriver.js";
 import type { SqlDriver } from "../DatabaseDriver.js";
@@ -45,9 +46,10 @@ export class ClickHouseDriver extends BaseDriver implements SqlDriver {
 
   constructor(
     target: ConnectionTarget,
-    private readonly tuning: DriverTuning
+    private readonly tuning: DriverTuning,
+    tracer: StatementTracer
   ) {
-    super(target);
+    super(target, tracer);
     this.client = new LazyResource(
       () => this.open(),
       (opened) => opened.client.close()
@@ -117,13 +119,15 @@ export class ClickHouseDriver extends BaseDriver implements SqlDriver {
 
   private async run(sql: string, params?: Record<string, unknown>): Promise<unknown[]> {
     const { client, settings } = await this.client.get();
-    const result = await client.query({
-      query: sql,
-      format: "JSONEachRow",
-      query_params: params,
-      clickhouse_settings: settings,
+    return this.traced(sql, params, async () => {
+      const result = await client.query({
+        query: sql,
+        format: "JSONEachRow",
+        query_params: params,
+        clickhouse_settings: settings,
+      });
+      return (await result.json()) as unknown[];
     });
-    return (await result.json()) as unknown[];
   }
 
   private async assertExists(database: string, table: string): Promise<void> {
@@ -182,11 +186,10 @@ export class ClickHouseDriver extends BaseDriver implements SqlDriver {
    * attaching any is exactly what a read-only account refuses.
    */
   private async negotiateSettings(client: ClickHouseClient): Promise<ClickHouseSettings> {
-    const result = await client.query({
-      query: "SELECT toUInt8(getSetting('readonly')) AS readonly",
-      format: "JSONEachRow",
-    });
-    const rows = (await result.json()) as { readonly: number | string }[];
+    const probe = "SELECT toUInt8(getSetting('readonly')) AS readonly";
+    const rows = (await this.traced(probe, undefined, async () =>
+      (await client.query({ query: probe, format: "JSONEachRow" })).json()
+    )) as { readonly: number | string }[];
     const level = Number(rows[0]?.readonly ?? 0);
 
     const limits: ClickHouseSettings = {

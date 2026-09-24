@@ -3,6 +3,7 @@ import { EngineCatalog } from "../../domain/Engine.js";
 import { ObjectNotFoundError } from "../../errors/ObjectNotFoundError.js";
 import { UnsupportedOperationError } from "../../errors/UnsupportedOperationError.js";
 import type { DriverTuning } from "../../types/connection.types.js";
+import type { StatementTracer } from "../../logging/StatementTracer.js";
 import type { DatabaseEntry, ObjectListing } from "../../types/driver.types.js";
 import { BaseDriver } from "../BaseDriver.js";
 import type { SearchDriver } from "../DatabaseDriver.js";
@@ -50,10 +51,11 @@ export class ElasticsearchDriver extends BaseDriver implements SearchDriver {
   constructor(
     target: ConnectionTarget,
     private readonly tuning: DriverTuning,
+    tracer: StatementTracer,
     // Wrapped so fetch is never invoked with this driver as its receiver.
     private readonly fetcher: typeof fetch = (input, init) => fetch(input, init)
   ) {
-    super(target);
+    super(target, tracer);
   }
 
   public async verify(): Promise<void> {
@@ -126,14 +128,22 @@ export class ElasticsearchDriver extends BaseDriver implements SearchDriver {
 
   private async send(request: ReadRequest, timeoutMs = this.tuning.queryTimeoutMs): Promise<unknown> {
     const { method, path, body } = this.route(request);
-    const response = await this.fetcher(`${this.baseUrl()}${path}`, {
-      method,
-      headers: this.headers(),
-      body: body === undefined ? undefined : JSON.stringify(body),
-      signal: AbortSignal.timeout(timeoutMs),
-    });
-
-    const text = await response.text();
+    // Traced as the request line, with the body as its parameters. The
+    // authorization header is never part of what is traced.
+    const { response, text } = await this.traced(
+      `${method} ${path}`,
+      body,
+      async () => {
+        const answer = await this.fetcher(`${this.baseUrl()}${path}`, {
+          method,
+          headers: this.headers(),
+          body: body === undefined ? undefined : JSON.stringify(body),
+          signal: AbortSignal.timeout(timeoutMs),
+        });
+        return { response: answer, text: await answer.text() };
+      },
+      (result) => `HTTP ${result.response.status}`
+    );
     const parsed = text ? this.parse(text) : null;
 
     if (response.status === 404 && request.kind !== "cluster" && request.kind !== "indices") {

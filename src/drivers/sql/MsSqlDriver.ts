@@ -2,6 +2,7 @@ import type { ConnectionPool } from "mssql";
 import type { ConnectionTarget } from "../../domain/ConnectionTarget.js";
 import { ObjectNotFoundError } from "../../errors/ObjectNotFoundError.js";
 import type { DriverTuning } from "../../types/connection.types.js";
+import type { StatementTracer } from "../../logging/StatementTracer.js";
 import type { DatabaseEntry, ObjectListing } from "../../types/driver.types.js";
 import { BaseDriver } from "../BaseDriver.js";
 import type { SqlDriver } from "../DatabaseDriver.js";
@@ -35,9 +36,10 @@ export class MsSqlDriver extends BaseDriver implements SqlDriver {
 
   constructor(
     target: ConnectionTarget,
-    private readonly tuning: DriverTuning
+    private readonly tuning: DriverTuning,
+    tracer: StatementTracer
   ) {
-    super(target);
+    super(target, tracer);
     this.pool = new LazyResource(
       () => this.createPool(),
       (opened) => opened.pool.close()
@@ -135,17 +137,17 @@ export class MsSqlDriver extends BaseDriver implements SqlDriver {
   private async run(text: string, inputs: Record<string, unknown> = {}): Promise<unknown[]> {
     const { pool, sql } = await this.pool.get();
     const transaction = new sql.Transaction(pool);
-    await transaction.begin();
+    await this.traced("BEGIN TRANSACTION", undefined, () => transaction.begin(), () => "ok");
 
     try {
       const request = new sql.Request(transaction);
       for (const [name, value] of Object.entries(inputs)) {
         request.input(name, value);
       }
-      const result = await request.query(text);
-      return (result.recordset ?? []) as unknown[];
+      const params = Object.keys(inputs).length > 0 ? inputs : undefined;
+      return await this.traced(text, params, async () => ((await request.query(text)).recordset ?? []) as unknown[]);
     } finally {
-      await transaction.rollback().catch(() => undefined);
+      await this.traced("ROLLBACK", undefined, () => transaction.rollback(), () => "ok").catch(() => undefined);
     }
   }
 

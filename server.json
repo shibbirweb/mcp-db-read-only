@@ -57,6 +57,42 @@
           "format": "number"
         },
         {
+          "name": "DB_LOG",
+          "description": "true logs every tool call, its statements and full output to stderr. Off by default",
+          "isRequired": false,
+          "format": "boolean"
+        },
+        {
+          "name": "DB_LOG_FILE",
+          "description": "Log every tool call to this file instead. Implies DB_LOG",
+          "isRequired": false,
+          "format": "filepath"
+        },
+        {
+          "name": "DB_LOG_DIR",
+          "description": "Save every tool call as its own JSON file in this folder, permanently. Implies logging",
+          "isRequired": false,
+          "format": "filepath"
+        },
+        {
+          "name": "DB_LOG_FORMAT",
+          "description": "pretty (default) or json, one object per line",
+          "isRequired": false,
+          "format": "string"
+        },
+        {
+          "name": "DB_LOG_PORT",
+          "description": "Serve a live log viewer in the browser on this port. Needs DB_LOG_DIR, DB_LOG or DB_LOG_FILE. No access control",
+          "isRequired": false,
+          "format": "number"
+        },
+        {
+          "name": "DB_LOG_HISTORY",
+          "description": "Entries the viewer keeps in memory when DB_LOG_DIR is not set. Defaults to 500",
+          "isRequired": false,
+          "format": "number"
+        },
+        {
           "name": "MYSQL_HOST",
           "description": "Legacy MySQL-only form, kept for drop-in compatibility. Prefer DB_URL",
           "isRequired": false,
@@ -125,6 +161,42 @@
         {
           "name": "DB_QUERY_TIMEOUT_MS",
           "description": "Server-side query timeout in milliseconds. Defaults to 30000",
+          "isRequired": false,
+          "format": "number"
+        },
+        {
+          "name": "DB_LOG",
+          "description": "true logs every tool call, its statements and full output to stderr. Off by default",
+          "isRequired": false,
+          "format": "boolean"
+        },
+        {
+          "name": "DB_LOG_FILE",
+          "description": "Log every tool call to this file instead, on a mounted volume. Implies DB_LOG",
+          "isRequired": false,
+          "format": "filepath"
+        },
+        {
+          "name": "DB_LOG_DIR",
+          "description": "Save every tool call as its own JSON file in this folder, on a mounted volume. Implies logging",
+          "isRequired": false,
+          "format": "filepath"
+        },
+        {
+          "name": "DB_LOG_FORMAT",
+          "description": "pretty (default) or json, one object per line",
+          "isRequired": false,
+          "format": "string"
+        },
+        {
+          "name": "DB_LOG_PORT",
+          "description": "Serve a live log viewer on this port (publish it with -p). Needs DB_LOG_DIR, DB_LOG or DB_LOG_FILE. No access control",
+          "isRequired": false,
+          "format": "number"
+        },
+        {
+          "name": "DB_LOG_HISTORY",
+          "description": "Entries the viewer keeps in memory when DB_LOG_DIR is not set. Defaults to 500",
           "isRequired": false,
           "format": "number"
         },

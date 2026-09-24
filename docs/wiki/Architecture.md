@@ -24,6 +24,7 @@ src/
     search/                 Search body allowlist
     names/                  Per-engine naming policies
   formatting/               ToolResponse, RowFormatter, JsonSerializer
+  logging/                  Optional call log: CallLogger, Redactor, formatters, sinks
   tools/                    BaseTool, DatabaseScopedTool, and one folder per group
   server/                   McpDbServer
 ```
@@ -135,4 +136,6 @@ Nothing constructs its own dependencies, which means nothing can be tested in is
 
 ## Why stdio and not HTTP
 
-Stdio means the client owns the process lifetime, there is no port to bind, nothing to authenticate, and nothing is reachable from outside the machine. For a process holding database credentials, not listening on a socket is a feature. The cost is that stdout is sacred: it carries the JSON-RPC stream, so every diagnostic goes through the injected logger to stderr, and the SQLite worker process has its stdout disconnected entirely.
+Stdio means the client owns the process lifetime, there is no port to bind, nothing to authenticate, and nothing is reachable from outside the machine. For a process holding database credentials, not listening on a socket is a feature.
+
+The one exception is opt-in: the live log viewer ([Call Logging](Call-Logging)) listens on `DB_LOG_PORT` when it is set. It serves only the call log, read-only, and nothing else; the MCP protocol itself stays on stdio. The cost is that stdout is sacred: it carries the JSON-RPC stream, so every diagnostic goes through the injected logger to stderr, and the SQLite worker process has its stdout disconnected entirely.

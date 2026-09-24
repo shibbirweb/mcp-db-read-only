@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { ConnectionTargetFactory } from "../../../dist/connections/ConnectionTargetFactory.js";
+import { SilentTracer } from "../../../dist/logging/StatementTracer.js";
 import { TEST_TUNING } from "../engineSuite.js";
 
 /** Primary and alternate fixture database names, shared by every SQL engine. */
@@ -25,7 +26,7 @@ export function reason(error) {
 /** Builds the driver under test directly, bypassing every tool and validator. */
 export function directDriver(DriverClass, url, ...extra) {
   const target = new ConnectionTargetFactory().fromUrl(url);
-  return new DriverClass(target, TEST_TUNING, ...extra);
+  return new DriverClass(target, TEST_TUNING, new SilentTracer(), ...extra);
 }
 
 /**

@@ -138,6 +138,95 @@ describe("timeouts", () => {
   });
 });
 
+describe("call logging", () => {
+  test("is off by default", () => {
+    assert.deepEqual(load({}).logging, {
+      enabled: false,
+      text: false,
+      file: null,
+      directory: null,
+      format: "pretty",
+      viewerPort: null,
+      viewerHistory: 500,
+    });
+  });
+
+  test("DB_LOG=true logs to stderr", () => {
+    const logging = load({ DB_LOG: "true" }).logging;
+    assert.equal(logging.enabled, true);
+    assert.equal(logging.file, null);
+  });
+
+  test("DB_LOG_FILE implies logging, to that file, made absolute", () => {
+    const logging = load({ DB_LOG_FILE: "logs/calls.log" }).logging;
+    assert.equal(logging.enabled, true);
+    assert.ok(logging.file.startsWith("/") && logging.file.endsWith("logs/calls.log"), logging.file);
+  });
+
+  test("DB_LOG_FORMAT=json picks JSON lines", () => {
+    assert.equal(load({ DB_LOG: "1", DB_LOG_FORMAT: "JSON" }).logging.format, "json");
+  });
+
+  test("an unknown format is a warning, and pretty is used", () => {
+    const config = load({ DB_LOG: "1", DB_LOG_FORMAT: "xml" });
+    assert.equal(config.logging.format, "pretty");
+    assert.match(config.warnings[0], /DB_LOG_FORMAT="xml"/);
+  });
+
+  test("DB_LOG_DIR saves to a folder, turns logging on, and writes no text", () => {
+    const logging = load({ DB_LOG_DIR: "logs" }).logging;
+    assert.equal(logging.enabled, true);
+    assert.equal(logging.text, false);
+    assert.ok(logging.directory.startsWith("/") && logging.directory.endsWith("/logs"), logging.directory);
+  });
+
+  test("DB_LOG_DIR combines with DB_LOG", () => {
+    const logging = load({ DB_LOG_DIR: "logs", DB_LOG: "true" }).logging;
+    assert.equal(logging.text, true);
+    assert.ok(logging.directory);
+  });
+
+  test("DB_LOG_PORT works with DB_LOG_DIR alone", () => {
+    assert.equal(load({ DB_LOG_DIR: "logs", DB_LOG_PORT: "4800" }).logging.viewerPort, 4800);
+  });
+
+  test("DB_LOG=false stays off", () => {
+    assert.equal(load({ DB_LOG: "false" }).logging.enabled, false);
+  });
+
+  test("the live viewer is off by default, with 500 entries of history", () => {
+    const logging = load({ DB_LOG: "true" }).logging;
+    assert.equal(logging.viewerPort, null);
+    assert.equal(logging.viewerHistory, 500);
+  });
+
+  test("DB_LOG_PORT starts the viewer when logging is on", () => {
+    assert.equal(load({ DB_LOG: "true", DB_LOG_PORT: "4800" }).logging.viewerPort, 4800);
+    assert.equal(load({ DB_LOG_FILE: "x.log", DB_LOG_PORT: "4800" }).logging.viewerPort, 4800);
+  });
+
+  test("DB_LOG_PORT alone does nothing, and says why", () => {
+    const config = load({ DB_LOG_PORT: "4800" });
+    assert.equal(config.logging.enabled, false);
+    assert.equal(config.logging.viewerPort, null);
+    assert.match(config.warnings[0], /DB_LOG_PORT is set but call logging is off/);
+  });
+
+  test("an invalid port is a warning, and no viewer", () => {
+    for (const port of ["http", "0", "70000", "48.5"]) {
+      const config = load({ DB_LOG: "true", DB_LOG_PORT: port });
+      assert.equal(config.logging.viewerPort, null, port);
+      assert.match(config.warnings[0], /not a port/, port);
+    }
+  });
+
+  test("DB_LOG_HISTORY sets the replay size, 0 meaning none", () => {
+    assert.equal(load({ DB_LOG_HISTORY: "50" }).logging.viewerHistory, 50);
+    assert.equal(load({ DB_LOG_HISTORY: "0" }).logging.viewerHistory, 0);
+    assert.equal(load({ DB_LOG_HISTORY: "lots" }).logging.viewerHistory, 500);
+  });
+});
+
 describe("nothing is fatal", () => {
   test("an empty environment is a valid configuration with no profiles", () => {
     const config = load({});

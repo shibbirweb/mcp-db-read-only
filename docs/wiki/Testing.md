@@ -10,6 +10,7 @@ test/
   integration/
     handshake.test.js       tool list and annotations; needs no server
     sqlite.test.js          always runs, against a temporary file
+    logging.test.js         the call log through a real server, against SQLite; always runs
     mysql.test.js ...       one entry file per server engine
   helpers/
     client.js               minimal MCP client over stdio

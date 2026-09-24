@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import type { ConnectionTarget } from "../../domain/ConnectionTarget.js";
 import { ObjectNotFoundError } from "../../errors/ObjectNotFoundError.js";
 import type { DriverTuning } from "../../types/connection.types.js";
+import type { StatementTracer } from "../../logging/StatementTracer.js";
 import type { DatabaseEntry, ObjectListing } from "../../types/driver.types.js";
 import { BaseDriver } from "../BaseDriver.js";
 import type { SqlDriver } from "../DatabaseDriver.js";
@@ -163,9 +164,10 @@ export class SqliteDriver extends BaseDriver implements SqlDriver {
 
   constructor(
     target: ConnectionTarget,
-    private readonly tuning: DriverTuning
+    private readonly tuning: DriverTuning,
+    tracer: StatementTracer
   ) {
-    super(target);
+    super(target, tracer);
     this.worker = new LazyResource(
       () =>
         SqliteWorkerHandle.start(
@@ -245,7 +247,9 @@ export class SqliteDriver extends BaseDriver implements SqlDriver {
   private async run(sql: string, params: SqliteParameter[] = []): Promise<unknown[]> {
     const handle = await this.worker.get();
     try {
-      return await handle.run(sql, params, this.tuning.queryTimeoutMs);
+      return await this.traced(sql, params.length > 0 ? params : undefined, () =>
+        handle.run(sql, params, this.tuning.queryTimeoutMs)
+      );
     } catch (error) {
       if (handle.dead) {
         await this.worker.reset();
