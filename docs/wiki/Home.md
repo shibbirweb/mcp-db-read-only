@@ -1,10 +1,24 @@
-# Developer documentation
+# mcp-db-read-only
 
-Internal documentation for [mcp-db-read-only](https://github.com/shibbirweb/mcp-db-read-only). If you are here to *use* the server, the [README](https://github.com/shibbirweb/mcp-db-read-only#readme) is the place to start. These pages are for people changing the code.
+A read-only MCP server that lets your AI assistant look at MySQL, MariaDB, PostgreSQL, SQLite, SQL Server, ClickHouse, MongoDB, Redis, Elasticsearch and OpenSearch, without being able to change anything.
 
-Every page explains not just what a class does but why it is shaped that way. Many of the non-obvious decisions exist to close a specific failure found in testing, either here or in [mcp-mysql-read-only](https://github.com/shibbirweb/mcp-mysql-read-only), the MySQL-only server this one generalises.
+## User guide
 
-## Pages
+Start here if you want to use the server.
+
+| Page | Covers |
+| --- | --- |
+| [Getting Started](Getting-Started) | From nothing to your first question, in about five minutes |
+| [Databases](Databases) | Connection URLs, read-only accounts and examples for every database |
+| [Using the Tools](Using-the-Tools) | All 18 tools: what each does and what to ask for |
+| [Configuration](Configuration) | Every setting, several databases, coming from mcp-mysql-read-only |
+| [Logging and Viewer](Logging-and-Viewer) | Saving every query to a folder, and watching them live in the browser |
+| [Docker](Docker) | Running the server and the viewer in Docker |
+| [Troubleshooting](Troubleshooting) | Common problems and their fixes |
+
+## Developer guide
+
+For people changing the code. Every page explains not just what a class does but why it is shaped that way. Many of the non-obvious decisions exist to close a specific failure found in testing, either here or in [mcp-mysql-read-only](https://github.com/shibbirweb/mcp-mysql-read-only), the MySQL-only server this one generalises.
 
 | Page | Covers |
 | --- | --- |
@@ -13,9 +27,9 @@ Every page explains not just what a class does but why it is shaped that way. Ma
 | [Domain and Configuration](Domain-and-Configuration) | The engine catalog, targets, URL parsing, the config loader, the registry |
 | [Drivers](Drivers) | The driver strategy, lazy opening, the LRU cache, each engine's driver |
 | [Read Only Enforcement](Read-Only-Enforcement) | Both layers, for every engine, and why each is shaped as it is |
-| [Tools](Tools) | The tool class hierarchy and all eighteen tools |
+| [Tools internals](Tools) | The tool class hierarchy and how tools are built |
+| [Call Logging internals](Call-Logging) | How calls and statements meet, redaction, formats, the log folder and the viewer |
 | [Server Lifecycle](Server-Lifecycle) | Composition root, startup, shutdown, the stdin EOF trap |
-| [Call Logging](Call-Logging) | The optional call log: how calls and statements meet, redaction, formats |
 | [Testing](Testing) | Suite layout, the shared engine suite, running without local databases |
 | [Release Process](Release-Process) | CI, Docker Hub, npm and MCP Registry publishing, the wiki |
 
