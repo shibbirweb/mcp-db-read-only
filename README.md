@@ -1,7 +1,7 @@
 # mcp-db-read-only
 
 [![CI](https://github.com/shibbirweb/mcp-db-read-only/actions/workflows/ci.yml/badge.svg)](https://github.com/shibbirweb/mcp-db-read-only/actions/workflows/ci.yml)
-[![M8ven Score](https://m8ven.ai/badge/mcp/shibbirweb-mcp-mysql-read-only-1rny1r)](https://m8ven.ai/mcp/shibbirweb-mcp-mysql-read-only-1rny1r)
+[![M8ven Score](https://m8ven.ai/badge/mcp/shibbirweb/mcp-db-read-only?variant=verified)](https://m8ven.ai/mcp/shibbirweb/mcp-db-read-only)
 [![npm](https://img.shields.io/npm/v/%40shibbirweb%2Fmcp-db-read-only?label=npm&color=cb3837)](https://www.npmjs.com/package/@shibbirweb/mcp-db-read-only)
 [![npm downloads](https://img.shields.io/npm/dm/%40shibbirweb%2Fmcp-db-read-only?style=flat&label=npm%20downloads)](https://www.npmjs.com/package/@shibbirweb/mcp-db-read-only)
 [![Docker Hub](https://img.shields.io/docker/v/shibbirweb/mcp-db-read-only?label=docker%20hub&sort=semver)](https://hub.docker.com/r/shibbirweb/mcp-db-read-only)
